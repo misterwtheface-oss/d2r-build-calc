@@ -12,6 +12,13 @@ const KIND_TITLE = {
 const LEVEL_KINDS = new Set(['all skills', 'class skills', 'skill tab', 'single skill', 'oskill', 'element skills']);
 const ITEM_KIND = { unique: 'Unique', 'set item': 'Set', 'set bonus': 'Set bonus', runeword: 'Runeword',
   prefix: 'Prefix', suffix: 'Suffix', automagic: 'Class item' };
+// Item filter chips: chip -> item kinds it covers.
+const ITEM_FILTER = { Unique: ['unique'], Set: ['set item', 'set bonus'], Runeword: ['runeword'],
+  Magic: ['prefix', 'suffix', 'automagic'] };
+const WEAPON = { axe: 'axes', blde: 'swords and daggers', blun: 'maces', pole: 'polearms', spea: 'spears',
+  thro: 'throwing weapons', h2h: 'claws', weap: 'any weapon', bow: 'bows', xbow: 'crossbows', mele: 'melee weapons' };
+const SKILL_EFFECT = { mastery: 'raises damage', pierce: 'lowers enemy resistance', enemyres: 'lowers enemy resistance',
+  immune: 'pierces immunity', damage: 'raises physical damage', crit: 'critical strike chance', crush: 'crushing blow' };
 
 const state = load();
 let cls = state.cls || 'sor';
@@ -114,6 +121,9 @@ function itemLine(b, k) {
     case 'mastery': return `+${v}% to ${el} Skill Damage`;
     case 'pierce': return `-${v}% to Enemy ${el} Resistance`;
     case 'immune': return `Pierces ${el} Immunity`;
+    case 'damage': return `+${v}% Enhanced Damage`;
+    case 'crit': return `${v}% Deadly Strike`;
+    case 'crush': return `${v}% Crushing Blow`;
   }
   return `${b.p} ${v}`;
 }
@@ -124,6 +134,72 @@ function grantLine(b, k) {
   return `${b.lo}% chance to cast level ${b.hi} ${n} ${b.h}`;
 }
 const itemValue = (b) => Number(b.hi || b.lo || 0);
+const itemShown = (kind) => {
+  const off = state.hideKinds || [];
+  return !Object.entries(ITEM_FILTER).some(([chip, kinds]) => off.includes(chip) && kinds.includes(kind));
+};
+
+// ---------- values at level ----------
+// Damage grows by a per-level amount that changes at levels 9, 17, 23 and 29 (EMinLev1..5 / MinLevDam1..5);
+// duration by ELevLen1..3 at 9 and 17. Values are in 256ths of a point: value << HitShift >> 8.
+function bracket(base, steps, lvl, cuts) {
+  let v = base;
+  for (let l = 2; l <= lvl; l++) {
+    const i = cuts.findIndex((c) => l <= c);
+    v += steps[i < 0 ? steps.length - 1 : i] || 0;
+  }
+  return v;
+}
+function valuesAt(s, lvl) {
+  const n = s.nums || {};
+  const num = (k) => Number(n[k] || 0);
+  const shift = (v) => (v * 2 ** num('HitShift')) / 256;
+  const dmgCuts = [8, 16, 22, 28];
+  const out = {};
+  if (num('EMin') || num('EMax')) {
+    out.emin = shift(bracket(num('EMin'), [1, 2, 3, 4, 5].map((i) => num(`EMinLev${i}`)), lvl, dmgCuts));
+    out.emax = shift(bracket(num('EMax'), [1, 2, 3, 4, 5].map((i) => num(`EMaxLev${i}`)), lvl, dmgCuts));
+  }
+  if (num('MinDam') || num('MaxDam')) {
+    out.pmin = shift(bracket(num('MinDam'), [1, 2, 3, 4, 5].map((i) => num(`MinLevDam${i}`)), lvl, dmgCuts));
+    out.pmax = shift(bracket(num('MaxDam'), [1, 2, 3, 4, 5].map((i) => num(`MaxLevDam${i}`)), lvl, dmgCuts));
+  }
+  if (num('ELen')) out.len = bracket(num('ELen'), [1, 2, 3].map((i) => num(`ELevLen${i}`)), lvl, [8, 16]) / 25;
+  if (num('mana')) {
+    out.mana = Math.max(num('minmana'), ((num('mana') + num('lvlmana') * (lvl - 1)) * 2 ** num('manashift')) / 256);
+  }
+  return out;
+}
+function synergyPct(k, field) {
+  return D.skills[k].b.filter((b) => b.t === 'synergy' && b.fld === field)
+    .reduce((sum, b) => sum + (evalFormula(b.fx, b.par, (n) => ptsOf(n)) || 0), 0);
+}
+function levelBlock(k) {
+  const s = D.skills[k];
+  const bonus = Number(state.bonus || 0);
+  const base = ptsOf(k);
+  const lvl = Math.max(1, base + (base ? bonus : 0));
+  const v = valuesAt(s, lvl);
+  const fmt = (x) => (Math.round(x * 10) / 10).toLocaleString();
+  const rows = [];
+  const esyn = synergyPct(k, 'EDmgSymPerCalc');
+  const psyn = synergyPct(k, 'DmgSymPerCalc');
+  if (v.emin != null) {
+    const m = 1 + esyn / 100;
+    rows.push([`${EL[s.element] || 'Elemental'} damage`, `${fmt(v.emin * m)}-${fmt(v.emax * m)}`,
+      esyn ? `+${fmt(esyn)}% from synergies` : '']);
+  }
+  if (v.pmin != null) {
+    const m = 1 + psyn / 100;
+    rows.push(['Damage', `${fmt(v.pmin * m)}-${fmt(v.pmax * m)}`, psyn ? `+${fmt(psyn)}% from synergies` : '']);
+  } else if (psyn) rows.push(['Damage', `+${fmt(psyn)}%`, 'from synergies']);
+  if (v.len) rows.push(['Duration', `${fmt(v.len)} seconds`, '']);
+  if (v.mana) rows.push(['Mana cost', fmt(v.mana), '']);
+  if (!rows.length) return '';
+  return `<div class="lvl"><p>${base ? `Level ${lvl}${bonus ? ` (${base} + ${bonus})` : ''}` : 'Level 1 (preview)'}</p>` +
+    rows.map(([a, b, c]) => `<div><span>${esc(a)}</span><b>${esc(b)}</b>${c ? `<em>${esc(c)}</em>` : ''}</div>`).join('') +
+    '</div>';
+}
 
 // ---------- render: classes, tabs, tree ----------
 function renderClasses() {
@@ -134,6 +210,7 @@ function renderSummary() {
   const n = totalPoints();
   document.getElementById('summary').innerHTML =
     `<span>Points <b>${n}</b></span><span>Level <b>${n ? Math.max(charLevelNeeded(), n + 1) : 1}</b></span>` +
+    `<label class="bonus">+Skills <input type="number" min="0" max="40" inputmode="numeric" data-bonus value="${Number(state.bonus || 0)}"></label>` +
     `<button class="reset" data-reset>Reset</button>`;
 }
 function renderTabs() {
@@ -169,11 +246,15 @@ function renderTree() {
 function group(k) {
   const s = D.skills[k];
   const g = Object.fromEntries(KIND_ORDER.map((x) => [x, []]));
-  for (const b of s.b) {
+  // Shared item groups ("kind|scope" -> rows [item, prop, param, min, max]) expand into item boosts.
+  const shared = s.ig.flatMap((gk) => D.groups[gk].map(([i, p, a, lo, hi]) =>
+    ({ t: 'item', k: gk.split('|')[0], i, p, a, lo, hi })));
+  for (const b of [...s.b, ...shared]) {
     if (b.t === 'synergy') g.synergy.push(b);
     else if (b.t === 'skill') g.skill.push(b);
     else if (b.t === 'grant') { if (FEATURES.grants) g.grant.push(b); }
     else if (!FEATURES.magicAffixes && ['prefix', 'suffix'].includes(D.items[b.i][0])) continue;
+    else if (!itemShown(D.items[b.i][0])) continue;
     else (LEVEL_KINDS.has(b.k) ? g.levels : g.damage).push(b);
   }
   return g;
@@ -205,8 +286,8 @@ function skillRows(list) {
   const seen = new Set();
   return list.filter((b) => !seen.has(b.f + b.k) && seen.add(b.f + b.k)).map((b) => {
     const src = D.skills[b.f];
-    const what = { mastery: 'raises damage', pierce: 'lowers enemy resistance', enemyres: 'lowers enemy resistance',
-      immune: 'pierces immunity' }[b.k] || b.k;
+    const what = (b.k === 'enemyres' && !D.skills[sel].element ? 'lowers enemy physical resistance' : SKILL_EFFECT[b.k] || b.k) +
+      (b.w && WEAPON[b.w] ? ` with ${WEAPON[b.w]}` : '');
     return `<li class="row" data-jump="${esc(b.f)}"><span class="ic sm" style="${iconStyle(src)}"></span>` +
       `<span class="txt"><b>${esc(src.name)}</b> <em>${esc(clsInfo(src.cls).name)}${b.via === 'aura' ? ' · aura/curse' : ''}</em>` +
       `<br><span class="v">${esc(what)}</span></span></li>`;
@@ -239,6 +320,9 @@ function renderDetail() {
     `<h2>${esc(s.name)}</h2><p>${esc(s.tab)}${s.element ? ` · ${EL[s.element]}` : ''} · req. level ${s.reqlevel}` +
     `${s.req.length ? ` · needs ${s.req.map(skillName).map(esc).join(', ')}` : ''}</p></div>` +
     `<div class="alloc"><button data-add="-1">−</button><b>${p}</b><button data-add="1"${reqMet(sel) ? '' : ' disabled'}>+</button></div></div>` +
+    levelBlock(sel) +
+    `<div class="chips">${Object.keys(ITEM_FILTER).map((c) =>
+      `<button class="chip${(state.hideKinds || []).includes(c) ? '' : ' on'}" data-chip="${c}">${c}</button>`).join('')}</div>` +
     KIND_ORDER.filter((x) => g[x].length).map((x) =>
       `<details data-sec="${x}"${open[x] !== false ? ' open' : ''}><summary>${KIND_TITLE[x]} <i>${x === 'skill' ? new Set(g[x].map((b) => b.f + b.k)).size : g[x].length}</i></summary>` +
       `<ul>${body[x](g[x])}</ul></details>`).join('');
@@ -257,7 +341,11 @@ document.addEventListener('click', (e) => {
     if (sel === t.dataset.skill && reqMet(sel)) setPts(sel, ptsOf(sel) + 1);
     sel = t.dataset.skill;
   } else if (t.dataset.add) setPts(sel, ptsOf(sel) + Number(t.dataset.add));
-  else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
+  else if (t.dataset.chip) {
+    const off = new Set(state.hideKinds || []);
+    off.has(t.dataset.chip) ? off.delete(t.dataset.chip) : off.add(t.dataset.chip);
+    state.hideKinds = [...off];
+  } else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
   else if (t.dataset.jump) {
     const s = D.skills[t.dataset.jump];
     if (!s) return;
@@ -270,6 +358,11 @@ document.addEventListener('contextmenu', (e) => {
   if (!t) return;
   e.preventDefault();
   sel = t.dataset.skill; setPts(sel, ptsOf(sel) - 1); save(); render();
+});
+document.addEventListener('change', (e) => {
+  if (!e.target.matches('[data-bonus]')) return;
+  state.bonus = Math.max(0, Math.min(40, Number(e.target.value) || 0));
+  save(); renderDetail();
 });
 document.addEventListener('toggle', (e) => {
   const d = e.target;

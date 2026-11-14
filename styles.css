@@ -69,3 +69,16 @@ ul { list-style: none; margin: 0 0 8px; padding: 0; }
   .layout { grid-template-columns: minmax(380px, 520px) minmax(360px, 1fr); align-items: start; max-width: 1200px; margin: 0 auto; }
   .detail { position: sticky; top: 90px; max-height: calc(100vh - 100px); overflow: auto; }
 }
+
+.bonus { display: flex; align-items: center; gap: 4px; }
+.bonus input { width: 42px; padding: 2px 4px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 3px; font: inherit; }
+.lvl { margin: 0 0 8px; padding: 8px; background: #0f0d0b; border: 1px solid var(--line); border-radius: 3px; font-size: 13px; }
+.lvl p { margin: 0 0 4px; font: 12px Exocet, serif; color: var(--gold); letter-spacing: .03em; }
+.lvl div { display: flex; gap: 8px; align-items: baseline; padding: 2px 0; }
+.lvl span { color: var(--dim); min-width: 110px; }
+.lvl b { color: #9db4ff; font-weight: normal; }
+.lvl em { font-style: normal; color: var(--syn2); font-size: 11px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
+.chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; color: var(--dim); }
+.chip.on { color: var(--gold); border-color: var(--gold); }
