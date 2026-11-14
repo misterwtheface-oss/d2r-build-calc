@@ -216,7 +216,10 @@ function tooltip(k) {
   const pts = ptsOf(k);
   const bonus = Number(state.bonus || 0);
   const ctxAt = (lvl) => ({ lvl, nums: s.nums || {}, key: k });
-  const lines = (sec, lvl) => tip.lines.filter((l) => l[0] === sec).map((l) => tipLine(l, ctxAt(lvl))).filter(Boolean)
+  // Per-level lines (section 1) are stored bottom-up, so they render in reverse ("over N seconds" follows the damage
+  // line, mana cost ends the block); the synergy block (3) is stored top-down with its header first.
+  const lines = (sec, lvl) => tip.lines.filter((l) => l[0] === sec)[sec === 1 ? 'reverse' : 'slice']()
+    .map((l) => tipLine(l, ctxAt(lvl))).filter(Boolean)
     .map((l) => `<div${l.c ? ` style="color:${l.c}"` : ''}>${esc(l.t)}</div>`).join('');
   const cur = pts ? pts + bonus : 0;
   let html = `<div class="tip"><p class="desc">${sentence(tip.long || tip.short).map(esc).join('<br>')}</p>`;
