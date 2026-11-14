@@ -4,9 +4,9 @@ const D = window.D2R;
 const FEATURES = { grants: true, magicAffixes: true };
 
 const EL = { fire: 'Fire', ltng: 'Lightning', cold: 'Cold', pois: 'Poison', mag: 'Magic' };
-const KIND_ORDER = ['synergy', 'skill', 'levels', 'damage', 'grant'];
+const KIND_ORDER = ['form', 'synergy', 'skill', 'levels', 'damage', 'grant'];
 const KIND_TITLE = {
-  synergy: 'Synergies', skill: 'Other skills', levels: 'Items: skill levels',
+  form: 'Form effects', synergy: 'Synergies', skill: 'Other skills', levels: 'Items: skill levels',
   damage: 'Items: damage and resistance', grant: 'Items that grant it',
 };
 const LEVEL_KINDS = new Set(['all skills', 'class skills', 'skill tab', 'single skill', 'oskill', 'element skills']);
@@ -95,7 +95,13 @@ function evalFormula(fx, par, lvlOf, ctx = { lvl: 1, nums: {} }) {
   const P = (n) => Number(par[`par${n}`] ?? ctx.nums[`Param${n}`] ?? 0);
   const L = ctx.lvl;
   let e = fx.replace(/^"|"$/g, '')
-    .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, n) => String(lvlOf(n)))
+    // skill('X'.blvl|lvl) = points in X; skill('X'.ln34 / dm12 / par2) = that formula on X's own row at X's level.
+    .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, n, attr) => {
+      if (/^b?lvl$/.test(attr) || !D.skills[n]) return String(lvlOf(n));
+      const lv = lvlOf(n);
+      return lv ? String(evalFormula(attr, {}, lvlOf, { lvl: lv, nums: D.skills[n].nums || {} }) ?? 0) : '0';
+    })
+    .replace(/\btoht\b/g, `(${Number(ctx.nums.ToHit || 0)}+(${ctx.lvl}-1)*${Number(ctx.nums.LevToHit || 0)})`)
     .replace(/\bln(\d)(\d)\b/g, (_, a, b) => `(${P(a)}+(${L}-1)*${P(b)})`)
     .replace(/\bdm(\d)(\d)\b/g, (_, a, b) => `((110*${L})*(${P(b)}-${P(a)})/(100*(${L}+6))+${P(a)})`)
     .replace(/\bpar(\d+)\b/g, (_, n) => String(P(n)))
@@ -263,7 +269,8 @@ function group(k) {
   const shared = s.ig.flatMap((gk) => D.groups[gk].map(([i, p, a, lo, hi]) =>
     ({ t: 'item', k: gk.split('|')[0], i, p, a, lo, hi })));
   for (const b of [...s.b, ...shared]) {
-    if (b.t === 'synergy') g.synergy.push(b);
+    if (b.t === 'form') g.form.push(b);
+    else if (b.t === 'synergy') g.synergy.push(b);
     else if (b.t === 'skill') g.skill.push(b);
     else if (b.t === 'grant') { if (FEATURES.grants) g.grant.push(b); }
     else if (!FEATURES.magicAffixes && ['prefix', 'suffix'].includes(D.items[b.i][0])) continue;
@@ -292,6 +299,21 @@ function synergyRows(list) {
       `<span class="txt"><b>${esc(skillName(b.f))}</b><br><span class="v">${esc(val)}</span>` +
       (now ? ` <span class="now">now ${sign(now)}</span>` : '') +
       `</span>${per == null ? '' : bar(per, max)}</li>`;
+  }).join('');
+}
+// Shapeshift form effects, valued at the form skill's level (points + gear bonus; level 1 preview with no points).
+function formRows(list) {
+  const lvlOf = (n) => (ptsOf(n) ? ptsOf(n) + Number(state.bonus || 0) : 0);
+  return list.map((b) => {
+    const f = D.skills[b.f];
+    const lvl = Math.max(1, lvlOf(b.f));
+    const v = evalFormula(b.fx, {}, lvlOf, { lvl, nums: f.nums || {} });
+    const amount = v == null ? '' : b.st === 'form_duration' ? `${+(v / 25).toFixed(1)} seconds`
+      : `${v > 0 ? '+' : ''}${Math.round(v)}%`;
+    const also = b.also.length ? ` (with ${b.also.map(skillName).join(', ')})` : '';
+    return `<li class="row" data-jump="${esc(b.f)}"><span class="ic sm" style="${iconStyle(f)}"></span>` +
+      `<span class="txt"><b>${esc(f.name)}</b>${ptsOf(b.f) ? '' : ' <em>level 1 preview</em>'}<br>` +
+      `<span class="v">${esc(amount ? `${amount} ${b.lb}` : b.lb)}${esc(also)}</span></span></li>`;
   }).join('');
 }
 function skillRows(list) {
@@ -324,7 +346,7 @@ function renderDetail() {
   const p = ptsOf(sel);
   const g = group(sel);
   const open = state.open || {};
-  const body = { synergy: synergyRows, skill: skillRows,
+  const body = { form: formRows, synergy: synergyRows, skill: skillRows,
     levels: (l) => itemRows(l, sel, itemLine), damage: (l) => itemRows(l, sel, itemLine),
     grant: (l) => itemRows(l, sel, grantLine) };
   el.innerHTML =
