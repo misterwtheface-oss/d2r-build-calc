@@ -1,0 +1,4 @@
+# The datamine workspace (../_d2r_extract) is never committed here; tools/build_data.py copies runtime artifacts only.
+__pycache__/
+*.log
+Thumbs.db
