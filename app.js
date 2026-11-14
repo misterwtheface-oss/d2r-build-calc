@@ -90,19 +90,32 @@ function setPts(k, v) {
 
 // ---------- synergy evaluation ----------
 // Formulas reference skill('Name'.blvl) (hard points) and parN (row params). Evaluate when only arithmetic remains.
-function evalFormula(fx, par, lvlOf) {
+// ctx = the boosted skill's level and its ParamN values, for lnXY / dmXY / lvl (skillcalc.txt).
+function evalFormula(fx, par, lvlOf, ctx = { lvl: 1, nums: {} }) {
+  const P = (n) => Number(par[`par${n}`] ?? ctx.nums[`Param${n}`] ?? 0);
+  const L = ctx.lvl;
   let e = fx.replace(/^"|"$/g, '')
     .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, n) => String(lvlOf(n)))
-    .replace(/par(\d+)/g, (_, n) => String(Number(par[`par${n}`] || 0)))
+    .replace(/\bln(\d)(\d)\b/g, (_, a, b) => `(${P(a)}+(${L}-1)*${P(b)})`)
+    .replace(/\bdm(\d)(\d)\b/g, (_, a, b) => `((110*${L})*(${P(b)}-${P(a)})/(100*(${L}+6))+${P(a)})`)
+    .replace(/\bpar(\d+)\b/g, (_, n) => String(P(n)))
+    .replace(/\b[bu]?lvl\b/g, String(L))
     .replace(/\bmin\(/g, 'Math.min(').replace(/\bmax\(/g, 'Math.max(');
-  if (/[^0-9+\-*/().,\s]|Math\.(?!min|max)/.test(e.replace(/Math\.(min|max)/g, ''))) return null;
+  if (/[^0-9+\-*/().,\s]/.test(e.replace(/Math\.(min|max)/g, ''))) return null;
   try { return Function(`"use strict";return (${e})`)(); } catch { return null; }
 }
-function perLevel(b) {
-  // Value one point in the source skill adds: formula at 1 point minus formula at 0 points.
-  const one = evalFormula(b.fx, b.par, (n) => (n === b.f ? 1 : 0));
-  const zero = evalFormula(b.fx, b.par, () => 0);
-  return one == null || zero == null ? null : one - zero;
+// What a synergy row is worth: per point in the source skill and with the current points.
+// Formulas that multiply the skill's own value ((base)*(100+levels*par)/100) read as a percentage of the base.
+function synergy(b, k) {
+  const s = D.skills[k];
+  const ctx = { lvl: Math.max(1, ptsOf(k) + (ptsOf(k) ? Number(state.bonus || 0) : 0)), nums: s.nums || {} };
+  const f = (lvlOf) => evalFormula(b.fx, b.par, lvlOf, ctx);
+  const zero = f(() => 0), one = f((n) => (n === b.f ? 1 : 0)), have = f((n) => ptsOf(n));
+  if (zero == null || one == null) return { per: null, now: null, pct: false };
+  if (zero !== 0 && /\*\s*\(?\s*100\s*\+/.test(b.fx)) {
+    return { per: (one / zero - 1) * 100, now: ((have ?? zero) / zero - 1) * 100, pct: true };
+  }
+  return { per: one - zero, now: (have ?? zero) - zero, pct: false };
 }
 const statLabel = (t) => (t || '').replace(/%[+]?d%*/g, '').replace(/%%/g, '%').replace(/\s+/g, ' ').trim();
 
@@ -172,7 +185,7 @@ function valuesAt(s, lvl) {
 }
 function synergyPct(k, field) {
   return D.skills[k].b.filter((b) => b.t === 'synergy' && b.fld === field)
-    .reduce((sum, b) => sum + (evalFormula(b.fx, b.par, (n) => ptsOf(n)) || 0), 0);
+    .reduce((sum, b) => sum + (synergy(b, k).now || 0), 0);
 }
 function levelBlock(k) {
   const s = D.skills[k];
@@ -264,18 +277,14 @@ function bar(v, max) {
   return `<span class="bar"><span style="width:${w}%"></span></span>`;
 }
 function synergyRows(list) {
-  const rows = list.map((b) => {
-    const per = perLevel(b);
-    const have = evalFormula(b.fx, b.par, (n) => ptsOf(n));
-    return { b, per, now: per == null ? null : (have ?? 0) - (evalFormula(b.fx, b.par, () => 0) ?? 0) };
-  });
+  const rows = list.map((b) => ({ b, ...synergy(b, sel) }));
   // One scale per field (rule A-magnitude-bars): per-level value against the largest per-level value shown.
   const max = Math.max(0, ...rows.map((r) => Math.abs(r.per || 0)));
-  return rows.map(({ b, per, now }) => {
+  return rows.map(({ b, per, now, pct }) => {
     const src = D.skills[b.f];
     // Effect inline with the amount: "+5% elemental damage per level".
     const what = (statLabel(b.fd) || b.fld).replace(/^to\s+/i, '').replace(/\s*%$/, '').toLowerCase();
-    const unit = /dmg|damage|%/i.test(b.fld + b.fd) ? '%' : '';
+    const unit = pct || /dmg|damage|%/i.test(b.fld + b.fd) ? "%" : "";
     const sign = (x) => `${x > 0 ? '+' : ''}${+x.toFixed(2)}${unit}`;
     const val = per == null ? what : `${sign(per)} ${what} per level`;
     return `<li class="row" data-jump="${esc(b.f)}">` +
