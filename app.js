@@ -1,7 +1,8 @@
 'use strict';
 // D2R skill calculator: original tree art + icons, points allocation, and every source that boosts a chosen skill.
 const D = window.D2R;
-const FEATURES = { grants: true, magicAffixes: true };
+// detailEffects: the tree's detail panel lists other skills and items besides synergies (those live in Search now).
+const FEATURES = { grants: true, magicAffixes: true, detailEffects: false };
 
 const EL = { fire: 'Fire', ltng: 'Lightning', cold: 'Cold', pois: 'Poison', mag: 'Magic' };
 const KIND_ORDER = ['synergy', 'skill', 'levels', 'damage', 'grant'];
@@ -14,15 +15,13 @@ const GENERIC_LEVELS = new Set(['all skills', 'class skills']);
 const LEVEL_KINDS = new Set(['all skills', 'class skills', 'skill tab', 'single skill', 'oskill', 'element skills']);
 const ITEM_KIND = { unique: 'Unique', 'set item': 'Set', 'set bonus': 'Set bonus', runeword: 'Runeword',
   prefix: 'Prefix', suffix: 'Suffix', automagic: 'Class item' };
-// Item filter chips: chip -> item kinds it covers.
-const ITEM_FILTER = { Unique: ['unique'], Set: ['set item', 'set bonus'], Runeword: ['runeword'],
-  Magic: ['prefix', 'suffix', 'automagic'] };
 const WEAPON = { axe: 'axes', blde: 'swords and daggers', blun: 'maces', pole: 'polearms', spea: 'spears',
   thro: 'throwing weapons', h2h: 'claws', weap: 'any weapon', bow: 'bows', xbow: 'crossbows', mele: 'melee weapons' };
 const SKILL_EFFECT = { mastery: 'raises damage', pierce: 'lowers enemy resistance', enemyres: 'lowers enemy resistance',
   immune: 'pierces immunity', damage: 'raises physical damage', crit: 'critical strike chance', crush: 'crushing blow' };
 
 const state = load();
+delete state.hideKinds;  // item filter chips were removed
 let cls = state.cls || 'sor';
 let page = state.page?.[cls] || 3;
 let sel = state.sel?.[cls] || null;
@@ -284,10 +283,6 @@ function grantLine(b, k) {
   return `${b.lo}% chance to cast level ${b.hi} ${n} ${b.h}`;
 }
 const itemValue = (b) => Number(b.hi || b.lo || 0);
-const itemShown = (kind) => {
-  const off = state.hideKinds || [];
-  return !Object.entries(ITEM_FILTER).some(([chip, kinds]) => off.includes(chip) && kinds.includes(kind));
-};
 
 // ---------- values at level ----------
 // Damage grows by a per-level amount that changes at levels 9, 17, 23 and 29 (EMinLev1..5 / MinLevDam1..5);
@@ -353,8 +348,9 @@ function levelBlock(k) {
 
 // ---------- render: classes, tabs, tree ----------
 function renderClasses() {
-  document.getElementById('classes').innerHTML = D.classes.map((c) =>
-    `<button class="cls${c.code === cls ? ' on' : ''}" data-cls="${c.code}">${esc(c.name)}</button>`).join('');
+  const search = state.view === 'search';
+  document.getElementById('classes').innerHTML = `<button class="cls${search ? ' on' : ''}" data-view="search">Search</button>` +
+    D.classes.map((c) => `<button class="cls${c.code === cls && !search ? ' on' : ''}" data-cls="${c.code}">${esc(c.name)}</button>`).join('');
 }
 function renderSummary() {
   const n = totalPoints();
@@ -404,7 +400,7 @@ function group(k) {
     else if (b.t === 'skill') g.skill.push(b);
     else if (b.t === 'grant') { if (FEATURES.grants) g.grant.push(b); }
     else if (!FEATURES.magicAffixes && ['prefix', 'suffix'].includes(D.items[b.i][0])) continue;
-    else if (!itemShown(D.items[b.i][0]) || GENERIC_LEVELS.has(b.k)) continue;
+    else if (GENERIC_LEVELS.has(b.k)) continue;
     else (LEVEL_KINDS.has(b.k) ? g.levels : g.damage).push(b);
   }
   return g;
@@ -462,35 +458,115 @@ function renderDetail() {
     `${s.req.length ? ` · needs ${s.req.map(skillName).map(esc).join(', ')}` : ''}</p></div>` +
     `<div class="alloc"><button data-add="-1">−</button><b>${p}</b><button data-add="1"${reqMet(sel) ? '' : ' disabled'}>+</button></div></div>` +
     tooltip(sel) +
-    `<div class="chips">${Object.keys(ITEM_FILTER).map((c) =>
-      `<button class="chip${(state.hideKinds || []).includes(c) ? '' : ' on'}" data-chip="${c}">${c}</button>`).join('')}</div>` +
-    KIND_ORDER.filter((x) => g[x].length).map((x) =>
+    KIND_ORDER.filter((x) => g[x].length && (x === 'synergy' || FEATURES.detailEffects)).map((x) =>
       `<details data-sec="${x}"${open[x] !== false ? ' open' : ''}><summary>${KIND_TITLE[x]} <i>${x === 'skill' ? new Set(g[x].map((b) => b.f + b.k)).size : x === 'synergy' ? new Set(g[x].map((b) => b.f)).size : g[x].length}</i></summary>` +
       `<ul>${body[x](g[x])}</ul></details>`).join('');
 }
+// ---------- search view ----------
+// Every source that boosts any skill, one row per source (an item, or a skill with its synergy / other effects).
+// Each row holds lines of text with the skills they reach, so a skill name finds the items and skills that boost it.
+const ITEM_ORDER = ['unique', 'set item', 'set bonus', 'runeword', 'automagic', 'prefix', 'suffix'];
+let searchIndex = null;
+function buildSearch() {
+  const skills = [], src = new Map();
+  const row = (id, make) => src.get(id) || src.set(id, { ...make(), lines: new Map() }).get(id);
+  const add = (r, text, k) => (r.lines.get(text) || r.lines.set(text, new Set()).get(text)).add(k);
+  for (const [k, s] of Object.entries(D.skills)) {
+    skills.push({ k, name: s.name.toLowerCase() });
+    const g = group(k);
+    for (const b of g.synergy) if (D.skills[b.f]) add(row(`s:${b.f}`, () => ({ skill: b.f, sec: 'synergy' })), 'Synergy bonus to', k);
+    for (const b of g.skill) {
+      const what = (b.k === 'enemyres' && !s.element ? 'lowers enemy physical resistance' : SKILL_EFFECT[b.k] || b.k) +
+        (b.w && WEAPON[b.w] ? ` with ${WEAPON[b.w]}` : '');
+      add(row(`o:${b.f}`, () => ({ skill: b.f, sec: 'skill' })), what[0].toUpperCase() + what.slice(1), k);
+    }
+    for (const b of [...g.levels, ...g.damage]) add(row(`i:${b.i}`, () => ({ item: b.i })), itemLine(b, k), k);
+    for (const b of g.grant) add(row(`i:${b.i}`, () => ({ item: b.i })), grantLine(b, k), k);
+  }
+  const rows = [...src.values()].map((r) => ({ ...r,
+    name: (r.item != null ? D.items[r.item][1] : skillName(r.skill)).toLowerCase(),
+    lines: [...r.lines].map(([text, ks]) => ({ text, ks: [...ks], low: text.toLowerCase(),
+      names: [...ks].map((x) => skillName(x).toLowerCase()) })) }));
+  const kindIx = (r) => ITEM_ORDER.indexOf(D.items[r.item][0]);
+  const items = rows.filter((r) => r.item != null).sort((a, b) => kindIx(a) - kindIx(b) || a.name.localeCompare(b.name));
+  return { skills, synergy: rows.filter((r) => r.sec === 'synergy'), skill: rows.filter((r) => r.sec === 'skill'), items };
+}
+function itemIcon(i) {
+  const a = D.items[i][4], S = D.itemSheet;
+  if (a == null || a < 0) return '';
+  const x = S.cols > 1 ? (a % S.cols) / (S.cols - 1) * 100 : 0, y = S.rows > 1 ? Math.floor(a / S.cols) / (S.rows - 1) * 100 : 0;
+  return `<span class="ic sm item-ic" style="background-image:url(${D.itemSheet.url});background-size:${S.cols * 100}% ${S.rows * 100}%;` +
+    `background-position:${x}% ${y}%"></span>`;
+}
+// Words must all appear in one place: the source's name, a line's text, or the name of a skill the line reaches.
+// A source matched by its own name shows all its lines; otherwise only the lines that match.
+function searchResults(q) {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (t) => words.every((w) => t.includes(w));
+  searchIndex ||= buildSearch();
+  const pick = (list) => list.map((r) => {
+    const all = hit(r.name);
+    const lines = all ? r.lines : r.lines.filter((l) => hit(l.low) || l.names.some(hit));
+    return lines.length ? { r, lines, all } : null;
+  }).filter(Boolean);
+  return { skills: searchIndex.skills.filter((s) => hit(s.name)).map((s) => s.k),
+    synergy: pick(searchIndex.synergy), skill: pick(searchIndex.skill), items: pick(searchIndex.items) };
+}
+// Skill-source lines name the skills they reach: the ones the query names, else how many.
+function reach(l, all, words) {
+  const named = all ? [] : l.ks.filter((k) => words.every((w) => skillName(k).toLowerCase().includes(w)));
+  const list = named.length ? named : l.ks;
+  if (list.length > 6) return `${list.length} skills`;
+  return list.map(skillName).join(', ');
+}
+function renderSearch() {
+  const q = (state.q || '').trim();
+  const out = document.getElementById('results');
+  if (q.length < 2) { out.innerHTML = ''; return; }
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const res = searchResults(q);
+  const sec = (title, list, body) => (list.length ? `<h3>${title} <i>${list.length}</i></h3><ul>${list.map(body).join('')}</ul>` : '');
+  const skillRow = (k, sub) => `<li class="row" data-jump="${esc(k)}"><span class="ic sm" style="${iconStyle(D.skills[k])}"></span>` +
+    `<span class="txt"><b>${esc(skillName(k))}</b> <em>${esc(sub)}</em>`;
+  const html =
+    sec('Skills', res.skills, (k) => `${skillRow(k, `${clsInfo(D.skills[k].cls).name} · ${D.skills[k].tab}`)}</span></li>`) +
+    sec(KIND_TITLE.synergy, res.synergy, ({ r, lines, all }) => `${skillRow(r.skill, clsInfo(D.skills[r.skill].cls).name)}` +
+      lines.map((l) => `<br><span class="v">${esc(l.text)} ${esc(reach(l, all, words))}</span>`).join('') + '</span></li>') +
+    sec(KIND_TITLE.skill, res.skill, ({ r, lines, all }) => `${skillRow(r.skill, clsInfo(D.skills[r.skill].cls).name)}` +
+      lines.map((l) => `<br><span class="v">${esc(l.text)}: ${esc(reach(l, all, words))}</span>`).join('') + '</span></li>') +
+    sec('Items', res.items, ({ r, lines }) => {
+      const it = D.items[r.item];
+      return `<li class="row item">${itemIcon(r.item)}<span class="txt"><b class="q-${it[0].replace(/\s/g, '')}">${esc(it[1])}</b> ` +
+        `<em>${esc(ITEM_KIND[it[0]] || it[0])}${it[2] ? ` · lvl ${esc(it[2])}` : ''}</em>` +
+        lines.map((l) => `<br><span class="v">${esc(l.text)}</span>`).join('') + '</span></li>';
+    });
+  out.innerHTML = html || '<p class="hint">No matches.</p>';
+}
+
 function render() {
-  renderClasses(); renderSummary(); renderTabs(); renderTree(); renderDetail();
+  const search = state.view === 'search';
+  document.body.classList.toggle('searching', search);
+  renderClasses(); renderSummary();
+  if (search) { renderSearch(); return; }
+  renderTabs(); renderTree(); renderDetail();
 }
 
 // ---------- events ----------
 document.addEventListener('click', (e) => {
   const t = e.target.closest('button,[data-jump]');
   if (!t) return;
-  if (t.dataset.cls) { cls = t.dataset.cls; page = state.page?.[cls] || 3; sel = state.sel?.[cls] || null; }
+  if (t.dataset.view) state.view = t.dataset.view;
+  else if (t.dataset.cls) { cls = t.dataset.cls; page = state.page?.[cls] || 3; sel = state.sel?.[cls] || null; state.view = 'tree'; }
   else if (t.dataset.page) page = +t.dataset.page;
   else if (t.dataset.skill) {
     if (sel === t.dataset.skill && reqMet(sel)) setPts(sel, ptsOf(sel) + 1);
     sel = t.dataset.skill;
   } else if (t.dataset.add) setPts(sel, ptsOf(sel) + Number(t.dataset.add));
-  else if (t.dataset.chip) {
-    const off = new Set(state.hideKinds || []);
-    off.has(t.dataset.chip) ? off.delete(t.dataset.chip) : off.add(t.dataset.chip);
-    state.hideKinds = [...off];
-  } else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
+  else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
   else if (t.dataset.jump) {
     const s = D.skills[t.dataset.jump];
     if (!s) return;
-    cls = s.cls; page = s.page; sel = t.dataset.jump;
+    cls = s.cls; page = s.page; sel = t.dataset.jump; state.view = 'tree';
   } else return;
   save(); render();
 });
@@ -499,6 +575,9 @@ document.addEventListener('contextmenu', (e) => {
   if (!t) return;
   e.preventDefault();
   sel = t.dataset.skill; setPts(sel, ptsOf(sel) - 1); save(); render();
+});
+document.getElementById('q').addEventListener('input', (e) => {
+  state.q = e.target.value; save(); renderSearch();
 });
 document.addEventListener('change', (e) => {
   if (!e.target.matches('[data-bonus]')) return;
@@ -510,4 +589,5 @@ document.addEventListener('toggle', (e) => {
   if (d.dataset?.sec) { state.open = { ...(state.open || {}), [d.dataset.sec]: d.open }; save(); }
 }, true);
 
+document.getElementById('q').value = state.q || '';
 render();

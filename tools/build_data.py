@@ -33,6 +33,8 @@ SHEET_ICON = 96     # icon size in the shipped sheet (Lanczos down, no sharpen; 
 SLOT_X = [119, 381, 641]
 SLOT_Y = [129, 308, 484, 665, 844, 1020]
 TREE_W, TREE_H = 895, 1169
+ITEM_CELL = 64      # item art cell in the shipped sheet (items keep their shape inside it)
+ITEM_COLS = 24
 
 missing = []
 
@@ -51,6 +53,30 @@ def ver(path):
 
 def rel(path):
     return os.path.relpath(path, APP).replace("\\", "/") + "?v=" + ver(path)
+
+
+def item_atlas(art_ix):
+    """Inventory art (HD .sprite, frame 0) packed into one grid sheet, each item fitted into a square cell keeping its
+    shape. Lanczos down only, no sharpen (rule G-no-ai-scaler). Item index -> cell = art index."""
+    sys.path.insert(0, os.path.join(EXT, "tools"))
+    from sprite2png import decode
+    root = os.path.join(EXT, "data", "casc", "data", "hd", "global", "ui", "items")
+    n = max(len(art_ix), 1)
+    rows = (n + ITEM_COLS - 1) // ITEM_COLS
+    sheet = Image.new("RGBA", (ITEM_CELL * ITEM_COLS, ITEM_CELL * rows))
+    for path, i in art_ix.items():
+        p = os.path.join(root, *path.split("/")) + ".sprite"
+        if not need(p, f"item sprite {path}"):
+            continue
+        im = decode(p)[1][0].convert("RGBA")
+        im = im.crop(im.getbbox() or (0, 0, *im.size))
+        scale = ITEM_CELL / max(im.size)
+        im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.LANCZOS)
+        x, y = (i % ITEM_COLS) * ITEM_CELL, (i // ITEM_COLS) * ITEM_CELL
+        sheet.paste(im, (x + (ITEM_CELL - im.width) // 2, y + (ITEM_CELL - im.height) // 2))
+    out = os.path.join(APP, "assets", "items.webp")
+    sheet.save(out, "WEBP", quality=88, method=6)
+    return {"url": rel(out), "cols": ITEM_COLS, "rows": rows}
 
 
 def main():
@@ -95,7 +121,7 @@ def main():
     # Compact item table: each item once, skill boosts reference it by index.
     # Item boosts that apply to many skills (all skills, a class, a tab, an element, physical) are stored once as a
     # shared group; a skill lists the group keys it belongs to ("ig"). Keeps data.js small on phones.
-    items, item_ix = [], {}
+    items, item_ix, art_ix = [], {}, {}
     groups = {}
     out_skills = {}
 
@@ -123,7 +149,11 @@ def main():
                 ik = (b["itemKind"], b["item"])
                 if ik not in item_ix:
                     item_ix[ik] = len(items)
-                    items.append([b["itemKind"], b["itemName"], b["lvlreq"], 1 if b["spawnable"] else 0])
+                    items.append([b["itemKind"], b["itemName"], b["lvlreq"], 1 if b["spawnable"] else 0, -1])
+                # Duplicate rows (same name) can differ in art; the first row that has art wins.
+                it = items[item_ix[ik]]
+                if it[4] < 0 and b.get("art"):
+                    it[4] = art_ix.setdefault(b["art"], len(art_ix))
                 row = [item_ix[ik], b["prop"], b["param"], b["min"], b["max"]]
                 if b["type"] == "grant":
                     bl.append({"t": "grant", "h": b["how"], "i": row[0], "p": row[1], "a": row[2], "lo": row[3], "hi": row[4]})
@@ -146,6 +176,11 @@ def main():
         out_skills[key]["b"] = bl
         out_skills[key]["ig"] = ig
 
+    for it in items:
+        if it[4] < 0:
+            missing.append(f"item art: {it[0]} {it[1]}")
+    item_sheet = item_atlas(art_ix)
+
     fonts = {}
     for fn in ("ExocetBlizzardOT-Medium.otf", "Formal436BT.ttf"):
         p = os.path.join(EXT, "data", "casc", "data", "hd", "ui", "fonts", fn)
@@ -154,7 +189,7 @@ def main():
             shutil.copyfile(p, dst)
             fonts[fn.split("-")[0].split(".")[0]] = rel(dst)
 
-    data = {"classes": classes, "skills": out_skills, "items": items, "fonts": fonts,
+    data = {"classes": classes, "skills": out_skills, "items": items, "itemSheet": item_sheet, "fonts": fonts,
             "groups": {k: g["rows"] for k, g in groups.items()},
             "ui": json.load(open(os.path.join(EXT, "data", "derived", "ui.json"), encoding="utf-8")),
             "missiles": json.load(open(os.path.join(EXT, "data", "derived", "missiles.json"), encoding="utf-8")),

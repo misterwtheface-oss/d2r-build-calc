@@ -79,9 +79,16 @@ ul { list-style: none; margin: 0 0 8px; padding: 0; }
 .lvl span { color: var(--dim); min-width: 110px; }
 .lvl b { color: #9db4ff; font-weight: normal; }
 .lvl em { font-style: normal; color: var(--syn2); font-size: 11px; }
-.chips { display: flex; gap: 6px; flex-wrap: wrap; margin: 0 0 6px; }
-.chip { padding: 3px 10px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; color: var(--dim); }
-.chip.on { color: var(--gold); border-color: var(--gold); }
+
+.search { display: none; max-width: 720px; margin: 0 auto; padding: 8px; }
+body.searching .search { display: block; }
+body.searching .layout, body.searching .summary { display: none; }
+.search input { width: 100%; padding: 10px 12px; background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 3px; font: inherit; font-size: 16px; }
+.search input:focus { outline: none; border-color: var(--gold); }
+.search h3 { margin: 14px 0 2px; font: 13px Exocet, serif; letter-spacing: .03em; color: var(--gold); }
+.search h3 i { font-style: normal; color: var(--dim); font-size: 11px; margin-left: 4px; }
+.row .item-ic { background-repeat: no-repeat; border-radius: 0; }
 
 .tip { margin: 0 0 8px; padding: 10px; background: #000c; border: 1px solid var(--line); border-radius: 3px;
   text-align: center; font-size: 13px; line-height: 1.45; }
