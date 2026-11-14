@@ -90,13 +90,17 @@ function setPts(k, v) {
 
 // ---------- synergy evaluation ----------
 // Formulas reference skill('Name'.blvl) (hard points) and parN (row params). Evaluate when only arithmetic remains.
+// Formulas name skills case-insensitively (Werewolf's calcs use 'shape shifting' for 'Shape Shifting').
+const SKILL_KEYS = Object.fromEntries(Object.keys(D.skills).map((k) => [k.toLowerCase(), k]));
+const skillKey = (n) => SKILL_KEYS[n.toLowerCase()] || n;
 // ctx = the boosted skill's level and its ParamN values, for lnXY / dmXY / lvl (skillcalc.txt).
 function evalFormula(fx, par, lvlOf, ctx = { lvl: 1, nums: {} }) {
   const P = (n) => Number(par[`par${n}`] ?? ctx.nums[`Param${n}`] ?? 0);
   const L = ctx.lvl;
   let e = fx.replace(/^"|"$/g, '')
     // skill('X'.blvl|lvl) = points in X; skill('X'.ln34 / dm12 / par2) = that formula on X's own row at X's level.
-    .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, n, attr) => {
+    .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, raw, attr) => {
+      const n = skillKey(raw);
       if (/^b?lvl$/.test(attr) || !D.skills[n]) return String(lvlOf(n));
       const lv = lvlOf(n);
       return lv ? String(evalFormula(attr, {}, lvlOf, { lvl: lv, nums: D.skills[n].nums || {} }) ?? 0) : '0';
@@ -199,6 +203,7 @@ function tipLine([, fn, ta, tb, ca, cb], ctx) {
   switch (fn) {
     case 36: { const v = a / (b || 1); return { t: fillText(Math.trunc(v) === 1 || !tb ? ta : tb, [v]) }; }
     case 40: return { t: fillText(ta, [tb]), c: TIP_COLORS[a] || null };
+    case 18: return { t: ta };  // plain text line (Werewolf's synergy list: "Lycanthropy")
     case 74: return { t: fillText(ta, [a]) };
     case 75: return { t: fillText(ta, [a, b]) };
     case 76: return { t: fillText(ta, [tb, a]) };
@@ -248,7 +253,6 @@ function synergy(b, k) {
   }
   return { per: one - zero, now: (have ?? zero) - zero, pct: false };
 }
-const statLabel = (t) => (t || '').replace(/%[+]?d%*/g, '').replace(/%%/g, '%').replace(/\s+/g, ' ').trim();
 
 // ---------- item text ----------
 function itemLine(b, k) {
@@ -408,22 +412,14 @@ function bar(v, max) {
   const w = max > 0 ? Math.max(2, Math.round((Math.abs(v) / max) * 100)) : 0;
   return `<span class="bar"><span style="width:${w}%"></span></span>`;
 }
+// Synergy sources as icon + name links only; their effects are in the tooltip's "Receives Bonuses From" block.
 function synergyRows(list) {
-  const rows = list.map((b) => ({ b, ...synergy(b, sel) }));
-  // One scale per field (rule A-magnitude-bars): per-level value against the largest per-level value shown.
-  const max = Math.max(0, ...rows.map((r) => Math.abs(r.per || 0)));
-  return rows.map(({ b, per, now, pct }) => {
+  const seen = new Set();
+  return list.filter((b) => !seen.has(b.f) && seen.add(b.f)).map((b) => {
     const src = D.skills[b.f];
-    // Effect inline with the amount: "+5% elemental damage per level".
-    const what = (statLabel(b.fd) || b.fld).replace(/^to\s+/i, '').replace(/\s*%$/, '').toLowerCase();
-    const unit = pct || /dmg|damage|%/i.test(b.fld + b.fd) ? "%" : "";
-    const sign = (x) => `${x > 0 ? '+' : ''}${+x.toFixed(2)}${unit}`;
-    const val = per == null ? what : `${sign(per)} ${what} per level`;
     return `<li class="row" data-jump="${esc(b.f)}">` +
       (src ? `<span class="ic sm" style="${iconStyle(src)}"></span>` : '') +
-      `<span class="txt"><b>${esc(skillName(b.f))}</b><br><span class="v">${esc(val)}</span>` +
-      (now ? ` <span class="now">now ${sign(now)}</span>` : '') +
-      `</span>${per == null ? '' : bar(per, max)}</li>`;
+      `<span class="txt"><b>${esc(skillName(b.f))}</b></span></li>`;
   }).join('');
 }
 // Shapeshift form effects, valued at the form skill's level (points + gear bonus; level 1 preview with no points).
@@ -494,7 +490,7 @@ function renderDetail() {
     `<div class="chips">${Object.keys(ITEM_FILTER).map((c) =>
       `<button class="chip${(state.hideKinds || []).includes(c) ? '' : ' on'}" data-chip="${c}">${c}</button>`).join('')}</div>` +
     KIND_ORDER.filter((x) => g[x].length).map((x) =>
-      `<details data-sec="${x}"${open[x] !== false ? ' open' : ''}><summary>${KIND_TITLE[x]} <i>${x === 'skill' ? new Set(g[x].map((b) => b.f + b.k)).size : g[x].length}</i></summary>` +
+      `<details data-sec="${x}"${open[x] !== false ? ' open' : ''}><summary>${KIND_TITLE[x]} <i>${x === 'skill' ? new Set(g[x].map((b) => b.f + b.k)).size : x === 'synergy' ? new Set(g[x].map((b) => b.f)).size : g[x].length}</i></summary>` +
       `<ul>${body[x](g[x])}</ul></details>`).join('');
 }
 function render() {
