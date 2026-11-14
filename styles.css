@@ -59,7 +59,6 @@ ul { list-style: none; margin: 0 0 8px; padding: 0; }
 .row em { font-style: normal; color: var(--dim); font-size: 11px; }
 .row .v { color: #9db4ff; }
 .row .now { color: var(--syn2); font-size: 12px; }
-.row .fx { display: block; color: #6c655b; font: 11px ui-monospace, monospace; overflow-wrap: anywhere; }
 .bar { flex: 0 0 56px; height: 6px; background: #221d18; border-radius: 3px; overflow: hidden; }
 .bar span { display: block; height: 100%; background: var(--gold); }
 .q-unique, .q-runeword { color: var(--unique); }

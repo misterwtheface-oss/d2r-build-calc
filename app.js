@@ -97,11 +97,6 @@ function perLevel(b) {
   const zero = evalFormula(b.fx, b.par, () => 0);
   return one == null || zero == null ? null : one - zero;
 }
-function readableFormula(fx, par) {
-  return fx.replace(/^"|"$/g, '')
-    .replace(/skill\('([^']+)'\.(\w+)\)/g, (_, n) => `[${skillName(n)}]`)
-    .replace(/par(\d+)/g, (_, n) => par[`par${n}`] || `par${n}`);
-}
 const statLabel = (t) => (t || '').replace(/%[+]?d%*/g, '').replace(/%%/g, '%').replace(/\s+/g, ' ').trim();
 
 // ---------- item text ----------
@@ -203,7 +198,7 @@ function synergyRows(list) {
       (src ? `<span class="ic sm" style="${iconStyle(src)}"></span>` : '') +
       `<span class="txt"><b>${esc(skillName(b.f))}</b> <em>${esc(what)}</em><br><span class="v">${esc(val)}</span>` +
       (now ? ` <span class="now">now ${now > 0 ? '+' : ''}${+now.toFixed(2)}</span>` : '') +
-      `<span class="fx">${esc(readableFormula(b.fx, b.par))}</span></span>${per == null ? '' : bar(per, max)}</li>`;
+      `</span>${per == null ? '' : bar(per, max)}</li>`;
   }).join('');
 }
 function skillRows(list) {
@@ -214,7 +209,7 @@ function skillRows(list) {
       immune: 'pierces immunity' }[b.k] || b.k;
     return `<li class="row" data-jump="${esc(b.f)}"><span class="ic sm" style="${iconStyle(src)}"></span>` +
       `<span class="txt"><b>${esc(src.name)}</b> <em>${esc(clsInfo(src.cls).name)}${b.via === 'aura' ? ' · aura/curse' : ''}</em>` +
-      `<br><span class="v">${esc(what)}</span><span class="fx">${esc(b.st)} = ${esc(b.fx)}</span></span></li>`;
+      `<br><span class="v">${esc(what)}</span></span></li>`;
   }).join('');
 }
 function itemRows(list, k, line) {
