@@ -4,11 +4,13 @@ const D = window.D2R;
 const FEATURES = { grants: true, magicAffixes: true };
 
 const EL = { fire: 'Fire', ltng: 'Lightning', cold: 'Cold', pois: 'Poison', mag: 'Magic' };
-const KIND_ORDER = ['form', 'synergy', 'skill', 'levels', 'damage', 'grant'];
+const KIND_ORDER = ['synergy', 'skill', 'levels', 'damage', 'grant'];
 const KIND_TITLE = {
-  form: 'Form effects', synergy: 'Synergies', skill: 'Other skills', levels: 'Items: skill levels',
+  synergy: 'Synergies', skill: 'Other skills', levels: 'Items: skill levels',
   damage: 'Items: damage and resistance', grant: 'Items that grant it',
 };
+// +All Skills / +Class Skill Levels apply to every skill, so they are left out of the per-skill lists.
+const GENERIC_LEVELS = new Set(['all skills', 'class skills']);
 const LEVEL_KINDS = new Set(['all skills', 'class skills', 'skill tab', 'single skill', 'oskill', 'element skills']);
 const ITEM_KIND = { unique: 'Unique', 'set item': 'Set', 'set bonus': 'Set bonus', runeword: 'Runeword',
   prefix: 'Prefix', suffix: 'Suffix', automagic: 'Class item' };
@@ -398,12 +400,11 @@ function group(k) {
   const shared = s.ig.flatMap((gk) => D.groups[gk].map(([i, p, a, lo, hi]) =>
     ({ t: 'item', k: gk.split('|')[0], i, p, a, lo, hi })));
   for (const b of [...s.b, ...shared]) {
-    if (b.t === 'form' || b.t === 'formsrc') g.form.push(b);
-    else if (b.t === 'synergy') g.synergy.push(b);
+    if (b.t === 'synergy') g.synergy.push(b);
     else if (b.t === 'skill') g.skill.push(b);
     else if (b.t === 'grant') { if (FEATURES.grants) g.grant.push(b); }
     else if (!FEATURES.magicAffixes && ['prefix', 'suffix'].includes(D.items[b.i][0])) continue;
-    else if (!itemShown(D.items[b.i][0])) continue;
+    else if (!itemShown(D.items[b.i][0]) || GENERIC_LEVELS.has(b.k)) continue;
     else (LEVEL_KINDS.has(b.k) ? g.levels : g.damage).push(b);
   }
   return g;
@@ -420,32 +421,6 @@ function synergyRows(list) {
     return `<li class="row" data-jump="${esc(b.f)}">` +
       (src ? `<span class="ic sm" style="${iconStyle(src)}"></span>` : '') +
       `<span class="txt"><b>${esc(skillName(b.f))}</b></span></li>`;
-  }).join('');
-}
-// Shapeshift form effects, valued at the form skill's level (points + gear bonus; level 1 preview with no points).
-// A skill feeding a form effect through its own row (Lycanthropy's life % and duration), valued at its level.
-function formSrcRow(b, lvlOf) {
-  const f = D.skills[b.f];
-  const v = evalFormula(b.term, {}, lvlOf, { lvl: Math.max(1, lvlOf(sel)), nums: D.skills[sel].nums || {} });
-  const amount = v == null ? '' : b.st === 'form_duration' ? `+${+(v / 25).toFixed(1)} seconds`
-    : `${v > 0 ? '+' : ''}${Math.round(v)}%`;
-  return `<li class="row" data-jump="${esc(b.f)}"><span class="ic sm" style="${iconStyle(f)}"></span>` +
-    `<span class="txt"><b>${esc(f.name)}</b>${ptsOf(sel) ? '' : ' <em>level 1 preview</em>'}<br>` +
-    `<span class="v">${esc(`${amount} ${b.lb} in ${f.name} form`)}</span></span></li>`;
-}
-function formRows(list) {
-  const lvlOf = (n) => (ptsOf(n) ? ptsOf(n) + Number(state.bonus || 0) : 0);
-  return list.map((b) => {
-    if (b.t === 'formsrc') return formSrcRow(b, lvlOf);
-    const f = D.skills[b.f];
-    const lvl = Math.max(1, lvlOf(b.f));
-    const v = evalFormula(b.fx, {}, lvlOf, { lvl, nums: f.nums || {} });
-    const amount = v == null ? '' : b.st === 'form_duration' ? `${+(v / 25).toFixed(1)} seconds`
-      : `${v > 0 ? '+' : ''}${Math.round(v)}%`;
-    const also = b.also.length ? ` (with ${b.also.map(skillName).join(', ')})` : '';
-    return `<li class="row" data-jump="${esc(b.f)}"><span class="ic sm" style="${iconStyle(f)}"></span>` +
-      `<span class="txt"><b>${esc(f.name)}</b>${ptsOf(b.f) ? '' : ' <em>level 1 preview</em>'}<br>` +
-      `<span class="v">${esc(amount ? `${amount} ${b.lb}` : b.lb)}${esc(also)}</span></span></li>`;
   }).join('');
 }
 function skillRows(list) {
@@ -478,7 +453,7 @@ function renderDetail() {
   const p = ptsOf(sel);
   const g = group(sel);
   const open = state.open || {};
-  const body = { form: formRows, synergy: synergyRows, skill: skillRows,
+  const body = { synergy: synergyRows, skill: skillRows,
     levels: (l) => itemRows(l, sel, itemLine), damage: (l) => itemRows(l, sel, itemLine),
     grant: (l) => itemRows(l, sel, grantLine) };
   el.innerHTML =

@@ -115,6 +115,10 @@ def main():
     for key, s in skills.items():
         bl, ig = [], []
         for b in s["boosts"]:
+            # Not shipped: shapeshift form rows (the tooltip shows form effects) and +All Skills / +Class Skill
+            # Levels items (they apply to every skill, so the app leaves them out of per-skill lists).
+            if b["type"] in ("form", "formsrc") or b.get("kind") in ("all skills", "class skills"):
+                continue
             if b["type"] in ("item", "grant"):
                 ik = (b["itemKind"], b["item"])
                 if ik not in item_ix:
@@ -134,11 +138,6 @@ def main():
             elif b["type"] == "synergy":
                 bl.append({"t": "synergy", "f": b["from"], "fld": b["field"], "fd": b.get("fieldDesc", ""),
                            "fx": b["formula"], "par": b["params"], "lk": b["levelKind"]})
-            elif b["type"] == "form":
-                bl.append({"t": "form", "f": b["from"], "st": b["stat"], "lb": b["label"], "fx": b["calc"],
-                           "also": b["also"]})
-            elif b["type"] == "formsrc":
-                bl.append({"t": "formsrc", "f": b["from"], "st": b["stat"], "lb": b["label"], "term": b["term"]})
             elif b["type"] == "skill":
                 bl.append({"t": "skill", "f": b["from"], "k": b["kind"], "st": b["stat"], "fx": b["calc"], "via": b["via"], "w": b.get("weapon", "")})
         out_skills[key] = {k: s[k] for k in ("id", "name", "cls", "page", "row", "col", "icon", "tab", "reqlevel",
