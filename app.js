@@ -273,12 +273,15 @@ function synergyRows(list) {
   const max = Math.max(0, ...rows.map((r) => Math.abs(r.per || 0)));
   return rows.map(({ b, per, now }) => {
     const src = D.skills[b.f];
-    const what = statLabel(b.fd) || b.fld;
-    const val = per == null ? '' : `${per > 0 ? '+' : ''}${+per.toFixed(2)}${/dmg|damage|%/i.test(b.fld + b.fd) ? '%' : ''} per level`;
+    // Effect inline with the amount: "+5% elemental damage per level".
+    const what = (statLabel(b.fd) || b.fld).replace(/^to\s+/i, '').replace(/\s*%$/, '').toLowerCase();
+    const unit = /dmg|damage|%/i.test(b.fld + b.fd) ? '%' : '';
+    const sign = (x) => `${x > 0 ? '+' : ''}${+x.toFixed(2)}${unit}`;
+    const val = per == null ? what : `${sign(per)} ${what} per level`;
     return `<li class="row" data-jump="${esc(b.f)}">` +
       (src ? `<span class="ic sm" style="${iconStyle(src)}"></span>` : '') +
-      `<span class="txt"><b>${esc(skillName(b.f))}</b> <em>${esc(what)}</em><br><span class="v">${esc(val)}</span>` +
-      (now ? ` <span class="now">now ${now > 0 ? '+' : ''}${+now.toFixed(2)}</span>` : '') +
+      `<span class="txt"><b>${esc(skillName(b.f))}</b><br><span class="v">${esc(val)}</span>` +
+      (now ? ` <span class="now">now ${sign(now)}</span>` : '') +
       `</span>${per == null ? '' : bar(per, max)}</li>`;
   }).join('');
 }
