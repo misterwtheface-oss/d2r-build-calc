@@ -12,12 +12,15 @@ that boosts it (other skills, items, anything else).
   Fanaticism, Amplify Damage / Decrepify, item Enhanced Damage / Deadly Strike / Crushing Blow), values at level
   (damage with synergy bonus, duration, mana; formulas confirmed by Blizzard's DataGuide), +Skills gear input, item
   filter chips. data.js 4.6 MB -> 0.5 MB via shared item groups.
+- 2026-11-13 (3): in-game tooltips from skilldesc lines + game text (per-level lines bottom-up, code 18 plain text,
+  missile values), shapeshift forms (form-only skills, Lycanthropy), synergy labels fixed. User trims: Synergies =
+  icon links only, no Form effects section, no +All Skills / +Class Skill Levels item rows.
 
 ## Open
 - [ ] Level 3: how the engine applies masteries / pierce / -resistance (stacking, caps); D2MOO as reference.
-- [ ] In-game tooltips (skilldesc lines, game text) render ~90% of lines. Still dropped: line codes 13 / 18 / 31 / 34 /
-  41 / 78 / 79 (summon life and damage, curse divisor, undocumented), mastery tokens madm / math / macr / mael,
-  missile-damage lines for missiles not listed in descmissile (e.g. Meteor's burning ground).
+- [ ] In-game tooltips (skilldesc lines, game text) render ~90% of lines. Still dropped: line codes 13 / 31 / 34 / 41 /
+  78 / 79 (summon life and damage, curse divisor, undocumented), mastery tokens madm / math / macr / mael,
+  missile-damage lines for missiles not listed in descmissile (e.g. Meteor's burning ground). Check dsc2 line order.
 - [ ] Mastery / pierce / -resistance not yet applied to the damage numbers (needs the Level 3 stacking rules).
 - [ ] Item filters still missing: class-only items, ladder-only runewords, unspawnable items.
 
