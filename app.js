@@ -102,6 +102,20 @@ function evalFormula(fx, par, lvlOf, ctx = { lvl: 1, nums: {} }) {
       return lv ? String(evalFormula(attr, {}, lvlOf, { lvl: lv, nums: D.skills[n].nums || {} }) ?? 0) : '0';
     })
     .replace(/\btoht\b/g, `(${Number(ctx.nums.ToHit || 0)}+(${ctx.lvl}-1)*${Number(ctx.nums.LevToHit || 0)})`)
+    // miss('name'.rang|rad|par1|par2): the missile row's Range / Radius / Param1-2.
+    .replace(/miss\('([^']+)'\.(\w+)\)/g, (all, m, attr) => {
+      const n = D.missiles[m]?.nums;
+      const col = { rang: 'Range', rad: 'Radius', par1: 'Param1', par2: 'Param2' }[attr];
+      return n && col ? String(Number(n[col] || 0)) : all;
+    })
+    // m<n>en / ex / eo / ey / el / rn / nm / xm: descmissile<n>'s damage, length and range at this skill's level.
+    .replace(/\bm([123])(en|ex|eo|ey|el|rn|nm|xm)\b/g, (all, i, what) => {
+      const v = ctx.key ? missileValue(ctx, Number(i), what) : null;
+      return v == null ? all : `(${v})`;
+    })
+    // Tooltip tokens (skillcalc.txt) that need the whole skill row: ctx.key names it.
+    .replace(/\b(usmc|mana|enma|exma|edmn|edmx|edns|edxs|enms|exms|edln|edma|pnma|pxma|sklvl|len|clc\d+|ast\d|pst\d+|pa1[0-2])\b/g,
+      (tok) => { const v = ctx.key ? special(tok, ctx, lvlOf) : null; return v == null ? tok : `(${v})`; })
     .replace(/\bln(\d)(\d)\b/g, (_, a, b) => `(${P(a)}+(${L}-1)*${P(b)})`)
     .replace(/\bdm(\d)(\d)\b/g, (_, a, b) => `((110*${L})*(${P(b)}-${P(a)})/(100*(${L}+6))+${P(a)})`)
     .replace(/\bpar(\d+)\b/g, (_, n) => String(P(n)))
@@ -110,6 +124,114 @@ function evalFormula(fx, par, lvlOf, ctx = { lvl: 1, nums: {} }) {
   if (/[^0-9+\-*/().,\s]/.test(e.replace(/Math\.(min|max)/g, ''))) return null;
   try { return Function(`"use strict";return (${e})`)(); } catch { return null; }
 }
+// Whole-row tokens. Damage includes the synergy bonus from current points; "256ths" tokens are scaled by 256.
+function special(tok, ctx, lvlOf) {
+  const s = D.skills[ctx.key];
+  const n = ctx.nums;
+  const num = (k) => Number(n[k] || 0);
+  const sub = (fx) => (fx ? evalFormula(fx, {}, lvlOf, ctx) : null);
+  const v = valuesAt(s, ctx.lvl);
+  const esyn = 1 + synergyPct(ctx.key, 'EDmgSymPerCalc') / 100;
+  const psyn = 1 + synergyPct(ctx.key, 'DmgSymPerCalc') / 100;
+  const lsyn = 1 + synergyPct(ctx.key, 'ELenSymPerCalc') / 100;
+  const mana256 = Math.max(num('minmana') * 256, (num('mana') + num('lvlmana') * (ctx.lvl - 1)) * 2 ** num('manashift'));
+  let m;
+  switch (tok) {
+    case 'usmc': return mana256;
+    case 'mana': return mana256 / 256;
+    case 'enma': case 'edmn': return v.emin == null ? null : v.emin * esyn;
+    case 'exma': case 'edmx': return v.emax == null ? null : v.emax * esyn;
+    case 'enms': case 'edns': return v.emin == null ? null : v.emin * esyn * 256;
+    case 'exms': case 'edxs': return v.emax == null ? null : v.emax * esyn * 256;
+    case 'edln': case 'edma': return v.len == null ? null : v.len * 25 * lsyn;
+    case 'pnma': return v.pmin == null ? null : v.pmin * psyn;
+    case 'pxma': return v.pmax == null ? null : v.pmax * psyn;
+    case 'sklvl': return ctx.lvl;
+    case 'len': return sub(s.calcs?.auralencalc);
+  }
+  if ((m = tok.match(/^clc(\d+)$/))) return sub(s.calcs?.[`calc${m[1]}`]);
+  if ((m = tok.match(/^ast(\d)$/))) return sub(s.calcs?.[`aurastatcalc${m[1]}`]);
+  if ((m = tok.match(/^pst(\d+)$/))) return sub(s.calcs?.[`passivecalc${m[1]}`]);
+  if ((m = tok.match(/^pa(1[0-2])$/))) return num(`Param${m[1]}`);
+  return null;
+}
+
+// Damage of a skill's tooltip missile; the missile's own synergy formula applies when it has one, else the skill's.
+function missileValue(ctx, i, what) {
+  const m = D.missiles[D.skills[ctx.key].dmis?.[i - 1]];
+  if (!m) return null;
+  const v = valuesAt({ nums: m.nums }, ctx.lvl);
+  const lvlOf = (n) => ptsOf(n);
+  const symPct = m.sym ? evalFormula(m.sym, {}, lvlOf, { lvl: ctx.lvl, nums: D.skills[ctx.key].nums || {} })
+    : synergyPct(ctx.key, 'EDmgSymPerCalc');
+  const syn = 1 + (symPct || 0) / 100;
+  switch (what) {
+    case 'en': case 'nm': return v.emin == null ? null : v.emin * syn;
+    case 'ex': case 'xm': return v.emax == null ? null : v.emax * syn;
+    case 'eo': return v.emin == null ? null : v.emin * syn * 256;
+    case 'ey': return v.emax == null ? null : v.emax * syn * 256;
+    case 'el': return v.len == null ? null : v.len * 25;
+    case 'rn': return Number(m.nums.Range || 0);
+  }
+  return null;
+}
+
+// ---------- in-game tooltip ----------
+// printf-style templates from the game text: %d, %+d, %s, %%.
+function fillText(t, args) {
+  let i = 0;
+  return t.replace(/%%|%(\+?)(d|s)/g, (all, plus, kind) => {
+    if (all === '%%') return '%';
+    const a = args[i++];
+    if (kind === 's') return a ?? '';
+    const v = Math.trunc(Number(a) || 0);
+    return plus && v >= 0 ? `+${v}` : String(v);
+  });
+}
+const TIP_COLORS = ['#fff', '#ff4d4d', '#00ff00', '#6969ff', '#c7b377', '#696969', '#000', '#d0c27d', '#ffa800',
+  '#ffff64', '#008000', '#ae00ff', '#00c800'];
+// One description line (function codes: DataGuide skilldesc.js § descline). null = a code or token not supported.
+function tipLine([, fn, ta, tb, ca, cb], ctx) {
+  const lvlOf = (n) => (ptsOf(n) ? ptsOf(n) + Number(state.bonus || 0) : 0);
+  const calc = (fx) => (fx === '' ? 0 : evalFormula(fx, {}, lvlOf, ctx));
+  const a = calc(ca), b = calc(cb);
+  if (a == null || b == null) return null;
+  switch (fn) {
+    case 36: { const v = a / (b || 1); return { t: fillText(Math.trunc(v) === 1 || !tb ? ta : tb, [v]) }; }
+    case 40: return { t: fillText(ta, [tb]), c: TIP_COLORS[a] || null };
+    case 74: return { t: fillText(ta, [a]) };
+    case 75: return { t: fillText(ta, [a, b]) };
+    case 76: return { t: fillText(ta, [tb, a]) };
+    case 77: return { t: fillText(ta, [tb, a, b]) };
+  }
+  return null;
+}
+// The game text is lower case; capitalize the first word and the word after " - ", keep the game's line breaks.
+const sentence = (t) => t.replace(/(^\s*|\s-\s)([a-z])/g, (_, p, c) => p + c.toUpperCase())
+  .split('\n').map((l) => l.trim()).filter(Boolean);
+function tooltip(k) {
+  const s = D.skills[k];
+  const tip = s.tip;
+  if (!tip || !tip.lines.length) return levelBlock(k);
+  const pts = ptsOf(k);
+  const bonus = Number(state.bonus || 0);
+  const ctxAt = (lvl) => ({ lvl, nums: s.nums || {}, key: k });
+  const lines = (sec, lvl) => tip.lines.filter((l) => l[0] === sec).map((l) => tipLine(l, ctxAt(lvl))).filter(Boolean)
+    .map((l) => `<div${l.c ? ` style="color:${l.c}"` : ''}>${esc(l.t)}</div>`).join('');
+  const cur = pts ? pts + bonus : 0;
+  let html = `<div class="tip"><p class="desc">${sentence(tip.long || tip.short).map(esc).join('<br>')}</p>`;
+  html += lines(2, Math.max(1, cur));
+  if (cur) {
+    html += `<h4>${esc(fillText(D.ui.curLevel, [cur]))}</h4>${lines(1, cur)}`;
+    if (cur < 99) html += `<h4>${esc(D.ui.nextLevel)}</h4>${lines(1, cur + 1)}`;
+  } else {
+    html += `<h4>${esc(D.ui.firstLevel)}</h4>${lines(1, 1)}`;
+  }
+  const syn = lines(3, Math.max(1, cur));
+  if (syn) html += `<div class="syn">${syn}</div>`;
+  return `${html}</div>`;
+}
+
 // What a synergy row is worth: per point in the source skill and with the current points.
 // Formulas that multiply the skill's own value ((base)*(100+levels*par)/100) read as a percentage of the base.
 function synergy(b, k) {
@@ -365,7 +487,7 @@ function renderDetail() {
     `<h2>${esc(s.name)}</h2><p>${esc(s.tab)}${s.element ? ` · ${EL[s.element]}` : ''} · req. level ${s.reqlevel}` +
     `${s.req.length ? ` · needs ${s.req.map(skillName).map(esc).join(', ')}` : ''}</p></div>` +
     `<div class="alloc"><button data-add="-1">−</button><b>${p}</b><button data-add="1"${reqMet(sel) ? '' : ' disabled'}>+</button></div></div>` +
-    levelBlock(sel) +
+    tooltip(sel) +
     `<div class="chips">${Object.keys(ITEM_FILTER).map((c) =>
       `<button class="chip${(state.hideKinds || []).includes(c) ? '' : ' on'}" data-chip="${c}">${c}</button>`).join('')}</div>` +
     KIND_ORDER.filter((x) => g[x].length).map((x) =>

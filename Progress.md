@@ -15,7 +15,9 @@ that boosts it (other skills, items, anything else).
 
 ## Open
 - [ ] Level 3: how the engine applies masteries / pierce / -resistance (stacking, caps); D2MOO as reference.
-- [ ] Values at level cover skill-row damage only; skills whose damage lives on their missile show none yet.
+- [ ] In-game tooltips (skilldesc lines, game text) render ~90% of lines. Still dropped: line codes 13 / 18 / 31 / 34 /
+  41 / 78 / 79 (summon life and damage, curse divisor, undocumented), mastery tokens madm / math / macr / mael,
+  missile-damage lines for missiles not listed in descmissile (e.g. Meteor's burning ground).
 - [ ] Mastery / pierce / -resistance not yet applied to the damage numbers (needs the Level 3 stacking rules).
 - [ ] Item filters still missing: class-only items, ladder-only runewords, unspawnable items.
 
