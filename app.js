@@ -558,12 +558,14 @@ const RUNES_IN = { weapon: 'a weapon', helm: 'a helm', armor: 'body armor', shie
 const RW_SORT = { l: { name: 'Level', key: (r) => r.l }, s: { name: 'Sockets', key: (r) => r.s } };
 const RW_SORT_DEFAULT = { k: 'l', d: -1 };
 let runeIndex = null;
+// One base class tile: a plain slot in a runeword card, a toggle (data-rwbase) in the filter bar.
+const baseTile = ([k, , name, a], on, btn) => `<${btn ? `button data-rwbase="${k}"` : 'span'} class="${on ? 'on' : ''}" ` +
+  `title="${esc(name)}" aria-label="${esc(name)}">${artIcon(a, 'base-ic', D.baseSheet)}</${btn ? 'button' : 'span'}>`;
 function classStrips(r) {
   return ['weapon', 'armor'].map((g) => {
     const list = D.baseClasses.filter((c) => c[1] === g);
     if (!list.some(([k]) => r.b.includes(k))) return '';
-    return `<div class="rw-bases ${g}">${list.map(([k, , name, a]) => `<span class="${r.b.includes(k) ? 'on' : ''}" ` +
-      `title="${esc(name)}" aria-label="${esc(name)}">${artIcon(a, 'base-ic', D.baseSheet)}</span>`).join('')}</div>`;
+    return `<div class="rw-bases ${g}">${list.map((c) => baseTile(c, r.b.includes(c[0]))).join('')}</div>`;
   }).join('');
 }
 // Bases in words: each class that takes the runeword (socket count included), then any type no class covers.
@@ -574,10 +576,14 @@ function renderRunes() {
   const hit = hitAll(queryWords(state.qs?.runes));
   const sort = RW_SORT[state.rwSort?.k] ? state.rwSort : RW_SORT_DEFAULT;
   const [k1, k2] = [RW_SORT[sort.k].key, RW_SORT[sort.k === 'l' ? 's' : 'l'].key];
-  const list = runeIndex.filter((x) => hit(x.hay)).map((x) => x.r)
+  // Base filter: runewords that fit any picked class.
+  const picked = (state.rwBase || []).filter((k) => D.baseClasses.some((c) => c[0] === k));
+  const list = runeIndex.filter((x) => hit(x.hay) && (!picked.length || picked.some((k) => x.r.b.includes(k)))).map((x) => x.r)
     .sort((a, b) => ((k1(a) - k1(b)) || (k2(a) - k2(b))) * sort.d || a.n.localeCompare(b.n));
   const bar = `<div class="rw-sort">${Object.entries(RW_SORT).map(([k, o]) => `<button class="${k === sort.k ? 'on' : ''}" ` +
-    `data-rwsort="${k}">${o.name}${k === sort.k ? (sort.d > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div>`;
+    `data-rwsort="${k}">${o.name}${k === sort.k ? (sort.d > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}` +
+    `${picked.length ? '<button class="clear" data-rwbase="">Clear</button>' : ''}</div>` +
+    `<div class="rw-bases rw-filter">${D.baseClasses.map((c) => baseTile(c, picked.includes(c[0]), true)).join('')}</div>`;
   const rows = list.map((r) => {
     const by = [];
     for (const [g, lines] of Object.entries(r.by)) {
@@ -624,7 +630,10 @@ document.addEventListener('click', (e) => {
     if (sel === t.dataset.skill && reqMet(sel)) setPts(sel, ptsOf(sel) + 1);
     sel = t.dataset.skill;
   } else if (t.dataset.add) setPts(sel, ptsOf(sel) + Number(t.dataset.add));
-  else if (t.dataset.rwsort) {
+  else if ('rwbase' in t.dataset) {
+    const k = t.dataset.rwbase, cur = state.rwBase || [];
+    state.rwBase = !k ? [] : cur.includes(k) ? cur.filter((x) => x !== k) : [...cur, k];
+  } else if (t.dataset.rwsort) {
     const k = t.dataset.rwsort, cur = state.rwSort || RW_SORT_DEFAULT;
     state.rwSort = { k, d: cur.k === k ? -cur.d : -1 };
   }

@@ -100,18 +100,22 @@ body.searching .layout, body.searching .summary { display: none; }
 /* Base class strips: inventory-slot tiles (2:3); lit = gold frame and full art, off = dim grey art on a plain slot. */
 .rw-bases { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; margin: 6px 0 2px; }
 .rw-bases.armor { grid-template-columns: repeat(9, 1fr); }
-@media (min-width: 640px) { .rw-bases.weapon { grid-template-columns: repeat(15, 1fr); } .rw-bases { max-width: 640px; } }
-.rw-bases span { position: relative; min-width: 0; aspect-ratio: 2 / 3; background: #100e0c; border: 1px solid #2e2720;
+.rw-bases.rw-filter { grid-template-columns: repeat(12, 1fr); gap: 2px; margin: 8px 0 4px; }
+@media (min-width: 640px) { .rw-bases.weapon { grid-template-columns: repeat(15, 1fr); } .rw-bases { max-width: 640px; }
+  .rw-bases.rw-filter { grid-template-columns: repeat(24, 1fr); max-width: none; } }
+.rw-bases > * { position: relative; padding: 0; min-width: 0; aspect-ratio: 2 / 3; background: #100e0c; border: 1px solid #2e2720;
   border-radius: 2px; }
 .rw-bases .base-ic { position: absolute; inset: 3px; background-repeat: no-repeat;
   filter: grayscale(1) brightness(.55); opacity: .7; }
-.rw-bases span.on { background: radial-gradient(#3b2e1a, #1a140d 75%); border-color: var(--gold);
+.rw-bases > .on { background: radial-gradient(#3b2e1a, #1a140d 75%); border-color: var(--gold);
   box-shadow: 0 0 4px #c7b37766; }
-.rw-bases span.on .base-ic { filter: brightness(1.25); opacity: 1; }
+.rw-bases > .on .base-ic { filter: brightness(1.25); opacity: 1; }
+.rw-filter > :not(.on) .base-ic { filter: grayscale(.7) brightness(.8); opacity: .9; }
 .rw-sort { display: flex; gap: 6px; margin: 8px 0 2px; }
 .rw-sort button { padding: 3px 10px; border: 1px solid var(--line); border-radius: 3px; font: 12px Exocet, serif;
   letter-spacing: .03em; color: var(--dim); }
 .rw-sort button.on { color: var(--gold); border-color: var(--gold); }
+.rw-sort .clear { margin-left: auto; }
 .rw-meta { margin: 2px 0 4px; color: var(--dim); font-size: 11px; }
 .rw .v { color: #9db4ff; }
 .rw .v.dim { color: #7f8fbf; }

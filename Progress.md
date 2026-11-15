@@ -31,10 +31,12 @@ that boosts it (other skills, items, anything else).
   gold frame, where a base of that class takes the runeword at its socket count (weapons.txt / armor.txt
   gemsockets; e.g. 5-socket Call to Arms skips claw, dagger, wand, club, orb). The base text names those classes.
   Data: extract `build_runewords.py` (`bases`, `other`, `base_classes.json`).
+- 2026-11-15 (2): Runewords base filter: bar of all 24 class tiles under the sort buttons (12 per row on phones, one
+  row wide); tap to toggle, several = runewords that fit any of them; Clear appears while one is on. Saved in state
+  (`rwBase`). Same tile code as the card strips (`baseTile`).
 
 ## Open
-- [ ] Runeword codex: base-item filter (e.g. only 4-socket armor) and per-base totals (runeword + runes summed)
-  if wanted.
+- [ ] Runeword codex: per-base totals (runeword + runes summed) if wanted (base filter done 2026-11-15).
 - [ ] Level 3: how the engine applies masteries / pierce / -resistance (stacking, caps); D2MOO as reference.
 - [ ] In-game tooltips (skilldesc lines, game text) render ~90% of lines. Still dropped: line codes 13 / 31 / 34 / 41 /
   78 / 79 (summon life and damage, curse divisor, undocumented), mastery tokens madm / math / macr / mael,
