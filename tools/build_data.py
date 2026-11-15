@@ -36,6 +36,7 @@ SLOT_Y = [129, 308, 484, 665, 844, 1020]
 TREE_W, TREE_H = 895, 1169
 ITEM_CELL = 64      # item art cell in the shipped sheet (items keep their shape inside it)
 ITEM_COLS = 24
+BASE_CELL = (96, 144)  # base class art (runeword strips): 2:3 cells, the shape of a weapon's inventory slots
 
 missing = []
 
@@ -59,17 +60,18 @@ def rel(path):
 def runeword_codex(art_ix):
     """Runewords view rows from the extract's runewords.json; rune art joins the item sheet (cell = art index).
     Row: n name, r runes [[name, art, lvl]], t base types, x excluded types, s sockets, l level, lad ladder window,
-    p patch, ln runeword lines, by {weapon|helm|armor|shield: rune socket lines}, w weapon class keys, o non-weapon base types.
-    Also returns the weapon classes [[key, name, art]] (weapon_classes.json, same build) for the class strip."""
+    p patch, ln runeword lines, by {weapon|helm|armor|shield: rune socket lines}, b base class keys, o base types no
+    class covers. Also returns the base classes [[key, group, name, cell]] (base_classes.json, same build) and their
+    art index (own sheet) for the class strips."""
     src = os.path.join(EXT, "data", "derived", "runewords.json")
-    csrc = os.path.join(EXT, "data", "derived", "weapon_classes.json")
-    if not need(src, "runewords (tools/build_runewords.py)") or not need(csrc, "weapon classes (tools/build_runewords.py)"):
-        return [], []
-    classes = []
+    csrc = os.path.join(EXT, "data", "derived", "base_classes.json")
+    if not need(src, "runewords (tools/build_runewords.py)") or not need(csrc, "base classes (tools/build_runewords.py)"):
+        return [], [], {}
+    classes, class_ix = [], {}
     for c in json.load(open(csrc, encoding="utf-8")):
         if not c["art"]:
-            missing.append(f"weapon class art: {c['key']}")
-        classes.append([c["key"], c["name"], art_ix.setdefault(c["art"], len(art_ix)) if c["art"] else -1])
+            missing.append(f"base class art: {c['key']}")
+        classes.append([c["key"], c["group"], c["name"], class_ix.setdefault(c["art"], len(class_ix)) if c["art"] else -1])
     out = []
     for r in json.load(open(src, encoding="utf-8")):
         runes = []
@@ -78,33 +80,35 @@ def runeword_codex(art_ix):
                 missing.append(f"rune art: {x['code']}")
             runes.append([x["name"].removesuffix(" Rune"), art_ix.setdefault(x["art"], len(art_ix)) if x["art"] else -1, x["lvl"]])
         out.append({"n": r["name"], "r": runes, "t": r["types"], "x": r["exclude"], "s": r["sockets"], "l": r["lvl"],
-                    "lad": r["ladder"], "p": r["patch"], "ln": r["lines"], "by": r["runes_by"], "w": r["weapons"],
+                    "lad": r["ladder"], "p": r["patch"], "ln": r["lines"], "by": r["runes_by"], "b": r["bases"],
                     "o": r["other"]})
-    return sorted(out, key=lambda r: (r["l"], r["n"])), classes
+    return sorted(out, key=lambda r: (r["l"], r["n"])), classes, class_ix
 
 
-def item_atlas(art_ix):
-    """Inventory art (HD .sprite, frame 0) packed into one grid sheet, each item fitted into a square cell keeping its
-    shape. Lanczos down only, no sharpen (rule G-no-ai-scaler). Item index -> cell = art index."""
+def item_atlas(art_ix, name="items", cell=(ITEM_CELL, ITEM_CELL), cols=ITEM_COLS):
+    """Inventory art (HD .sprite, frame 0) packed into one grid sheet assets/<name>.webp, each item fitted into a
+    cell keeping its shape. Lanczos down only, no sharpen (rule G-no-ai-scaler). Item index -> cell = art index."""
     sys.path.insert(0, os.path.join(EXT, "tools"))
     from sprite2png import decode
     root = os.path.join(EXT, "data", "casc", "data", "hd", "global", "ui", "items")
+    cw, ch = cell
     n = max(len(art_ix), 1)
-    rows = (n + ITEM_COLS - 1) // ITEM_COLS
-    sheet = Image.new("RGBA", (ITEM_CELL * ITEM_COLS, ITEM_CELL * rows))
+    cols = min(cols, n)
+    rows = (n + cols - 1) // cols
+    sheet = Image.new("RGBA", (cw * cols, ch * rows))
     for path, i in art_ix.items():
         p = os.path.join(root, *path.split("/")) + ".sprite"
         if not need(p, f"item sprite {path}"):
             continue
         im = decode(p)[1][0].convert("RGBA")
         im = im.crop(im.getbbox() or (0, 0, *im.size))
-        scale = ITEM_CELL / max(im.size)
+        scale = min(cw / im.width, ch / im.height)
         im = im.resize((max(1, round(im.width * scale)), max(1, round(im.height * scale))), Image.LANCZOS)
-        x, y = (i % ITEM_COLS) * ITEM_CELL, (i // ITEM_COLS) * ITEM_CELL
-        sheet.paste(im, (x + (ITEM_CELL - im.width) // 2, y + (ITEM_CELL - im.height) // 2))
-    out = os.path.join(APP, "assets", "items.webp")
+        x, y = (i % cols) * cw, (i // cols) * ch
+        sheet.paste(im, (x + (cw - im.width) // 2, y + (ch - im.height) // 2))
+    out = os.path.join(APP, "assets", f"{name}.webp")
     sheet.save(out, "WEBP", quality=88, method=6)
-    return {"url": rel(out), "cols": ITEM_COLS, "rows": rows}
+    return {"url": rel(out), "cols": cols, "rows": rows}
 
 
 def main():
@@ -207,8 +211,9 @@ def main():
     for it in items:
         if it[4] < 0:
             missing.append(f"item art: {it[0]} {it[1]}")
-    runewords, weapon_classes = runeword_codex(art_ix)
+    runewords, base_classes, class_ix = runeword_codex(art_ix)
     item_sheet = item_atlas(art_ix)
+    base_sheet = item_atlas(class_ix, "bases", BASE_CELL, 8)
 
     fonts = {}
     for fn in ("ExocetBlizzardOT-Medium.otf", "Formal436BT.ttf"):
@@ -219,7 +224,7 @@ def main():
             fonts[fn.split("-")[0].split(".")[0]] = rel(dst)
 
     data = {"classes": classes, "skills": out_skills, "items": items, "itemSheet": item_sheet, "runewords": runewords,
-            "weaponClasses": weapon_classes, "fonts": fonts,
+            "baseClasses": base_classes, "baseSheet": base_sheet, "fonts": fonts,
             "groups": {k: g["rows"] for k, g in groups.items()},
             "ui": json.load(open(os.path.join(EXT, "data", "derived", "ui.json"), encoding="utf-8")),
             "missiles": json.load(open(os.path.join(EXT, "data", "derived", "missiles.json"), encoding="utf-8")),

@@ -493,12 +493,11 @@ function buildSearch() {
   const items = rows.filter((r) => r.item != null).sort((a, b) => kindIx(a) - kindIx(b) || a.name.localeCompare(b.name));
   return { skills, synergy: rows.filter((r) => r.sec === 'synergy'), skill: rows.filter((r) => r.sec === 'skill'), items };
 }
-// Cell a of the item art sheet (items and runes).
-function artIcon(a, cls = 'ic sm item-ic') {
-  const S = D.itemSheet;
+// Cell a of an art sheet (default: the item sheet, items and runes).
+function artIcon(a, cls = 'ic sm item-ic', S = D.itemSheet) {
   if (a == null || a < 0) return '';
   const x = S.cols > 1 ? (a % S.cols) / (S.cols - 1) * 100 : 0, y = S.rows > 1 ? Math.floor(a / S.cols) / (S.rows - 1) * 100 : 0;
-  return `<span class="${cls}" style="background-image:url(${D.itemSheet.url});background-size:${S.cols * 100}% ${S.rows * 100}%;` +
+  return `<span class="${cls}" style="background-image:url(${S.url});background-size:${S.cols * 100}% ${S.rows * 100}%;` +
     `background-position:${x}% ${y}%"></span>`;
 }
 const itemIcon = (i) => artIcon(D.items[i][4]);
@@ -552,26 +551,31 @@ function renderSearch() {
 // ---------- runewords view ----------
 // Codex of every enabled runeword: runes in order, bases, level, the runeword's own lines and what its runes add in
 // each kind of base (lines that are the same for two bases, helm and body armor, are listed once).
-// Weapon runewords show every socketable weapon class, lit where a base of that class takes the runeword.
+// Each runeword shows every socketable class of its slot group (weapons, armor), lit where a base of that class takes it.
 const RUNES_IN = { weapon: 'a weapon', helm: 'a helm', armor: 'body armor', shield: 'a shield' };
-// Sort by level or sockets; tapping the active key flips the direction. Ties fall back to level, then name.
+// Sort by level or sockets, the other key breaking ties (then name); tapping the active key flips the direction.
+// Default: highest level first, then most sockets.
 const RW_SORT = { l: { name: 'Level', key: (r) => r.l }, s: { name: 'Sockets', key: (r) => r.s } };
+const RW_SORT_DEFAULT = { k: 'l', d: -1 };
 let runeIndex = null;
-function weaponStrip(r) {
-  if (!r.w.length) return '';
-  return `<div class="rw-wpn">${D.weaponClasses.map(([k, name, a]) =>
-    `<span class="${r.w.includes(k) ? 'on' : ''}" title="${esc(name)}" aria-label="${esc(name)}">${artIcon(a, 'ic wpn-ic')}</span>`).join('')}</div>`;
+function classStrips(r) {
+  return ['weapon', 'armor'].map((g) => {
+    const list = D.baseClasses.filter((c) => c[1] === g);
+    if (!list.some(([k]) => r.b.includes(k))) return '';
+    return `<div class="rw-bases ${g}">${list.map(([k, , name, a]) => `<span class="${r.b.includes(k) ? 'on' : ''}" ` +
+      `title="${esc(name)}" aria-label="${esc(name)}">${artIcon(a, 'base-ic', D.baseSheet)}</span>`).join('')}</div>`;
+  }).join('');
 }
-// Bases in words: weapon runewords name each class that takes them (socket count included), then any armor bases.
-const baseNames = (r) => (r.w.length ? [...D.weaponClasses.filter(([k]) => r.w.includes(k)).map(([, n]) => n), ...r.o] : r.t);
+// Bases in words: each class that takes the runeword (socket count included), then any type no class covers.
+const baseNames = (r) => [...D.baseClasses.filter(([k]) => r.b.includes(k)).map((c) => c[2]), ...r.o];
 function renderRunes() {
   runeIndex ||= D.runewords.map((r) => ({ r, hay: [r.n, ...r.r.map((x) => x[0]), ...r.t, r.lad, r.p, ...r.ln,
     ...Object.values(r.by).flat()].join(' ').toLowerCase() }));
   const hit = hitAll(queryWords(state.qs?.runes));
-  const sort = RW_SORT[state.rwSort?.k] ? state.rwSort : { k: 'l', d: 1 };
-  const key = RW_SORT[sort.k].key;
+  const sort = RW_SORT[state.rwSort?.k] ? state.rwSort : RW_SORT_DEFAULT;
+  const [k1, k2] = [RW_SORT[sort.k].key, RW_SORT[sort.k === 'l' ? 's' : 'l'].key];
   const list = runeIndex.filter((x) => hit(x.hay)).map((x) => x.r)
-    .sort((a, b) => (key(a) - key(b)) * sort.d || a.l - b.l || a.n.localeCompare(b.n));
+    .sort((a, b) => ((k1(a) - k1(b)) || (k2(a) - k2(b))) * sort.d || a.n.localeCompare(b.n));
   const bar = `<div class="rw-sort">${Object.entries(RW_SORT).map(([k, o]) => `<button class="${k === sort.k ? 'on' : ''}" ` +
     `data-rwsort="${k}">${o.name}${k === sort.k ? (sort.d > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div>`;
   const rows = list.map((r) => {
@@ -582,7 +586,7 @@ function renderRunes() {
     }
     return `<li class="rw"><div class="rw-head"><b>${esc(r.n)}</b><em>${r.s} sockets · lvl ${r.l}</em></div>` +
       `<div class="rw-runes">${r.r.map(([n, a]) => `<span>${artIcon(a, 'ic rune-ic')}${esc(n)}</span>`).join('')}</div>` +
-      weaponStrip(r) +
+      classStrips(r) +
       `<p class="rw-meta">${esc([baseNames(r).join(', ') + (r.x.length ? ` (not ${r.x.join(', ')})` : ''), r.p, r.lad].filter(Boolean).join(' · '))}</p>` +
       r.ln.map((l) => `<div class="v">${esc(l)}</div>`).join('') +
       by.map((b) => `<p class="rw-by">Runes in ${esc(b.where.join(' or '))}</p>` +
@@ -621,8 +625,8 @@ document.addEventListener('click', (e) => {
     sel = t.dataset.skill;
   } else if (t.dataset.add) setPts(sel, ptsOf(sel) + Number(t.dataset.add));
   else if (t.dataset.rwsort) {
-    const k = t.dataset.rwsort, cur = state.rwSort || { k: 'l', d: 1 };
-    state.rwSort = { k, d: cur.k === k ? -cur.d : 1 };
+    const k = t.dataset.rwsort, cur = state.rwSort || RW_SORT_DEFAULT;
+    state.rwSort = { k, d: cur.k === k ? -cur.d : -1 };
   }
   else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
   else if (t.dataset.jump) {
