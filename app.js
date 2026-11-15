@@ -552,13 +552,29 @@ function renderSearch() {
 // ---------- runewords view ----------
 // Codex of every enabled runeword: runes in order, bases, level, the runeword's own lines and what its runes add in
 // each kind of base (lines that are the same for two bases, helm and body armor, are listed once).
+// Weapon runewords show every socketable weapon class, lit where a base of that class takes the runeword.
 const RUNES_IN = { weapon: 'a weapon', helm: 'a helm', armor: 'body armor', shield: 'a shield' };
+// Sort by level or sockets; tapping the active key flips the direction. Ties fall back to level, then name.
+const RW_SORT = { l: { name: 'Level', key: (r) => r.l }, s: { name: 'Sockets', key: (r) => r.s } };
 let runeIndex = null;
+function weaponStrip(r) {
+  if (!r.w.length) return '';
+  return `<div class="rw-wpn">${D.weaponClasses.map(([k, name, a]) =>
+    `<span class="${r.w.includes(k) ? 'on' : ''}" title="${esc(name)}" aria-label="${esc(name)}">${artIcon(a, 'ic wpn-ic')}</span>`).join('')}</div>`;
+}
+// Bases in words: weapon runewords name each class that takes them (socket count included), then any armor bases.
+const baseNames = (r) => (r.w.length ? [...D.weaponClasses.filter(([k]) => r.w.includes(k)).map(([, n]) => n), ...r.o] : r.t);
 function renderRunes() {
   runeIndex ||= D.runewords.map((r) => ({ r, hay: [r.n, ...r.r.map((x) => x[0]), ...r.t, r.lad, r.p, ...r.ln,
     ...Object.values(r.by).flat()].join(' ').toLowerCase() }));
   const hit = hitAll(queryWords(state.qs?.runes));
-  const rows = runeIndex.filter((x) => hit(x.hay)).map(({ r }) => {
+  const sort = RW_SORT[state.rwSort?.k] ? state.rwSort : { k: 'l', d: 1 };
+  const key = RW_SORT[sort.k].key;
+  const list = runeIndex.filter((x) => hit(x.hay)).map((x) => x.r)
+    .sort((a, b) => (key(a) - key(b)) * sort.d || a.l - b.l || a.n.localeCompare(b.n));
+  const bar = `<div class="rw-sort">${Object.entries(RW_SORT).map(([k, o]) => `<button class="${k === sort.k ? 'on' : ''}" ` +
+    `data-rwsort="${k}">${o.name}${k === sort.k ? (sort.d > 0 ? ' ▲' : ' ▼') : ''}</button>`).join('')}</div>`;
+  const rows = list.map((r) => {
     const by = [];
     for (const [g, lines] of Object.entries(r.by)) {
       const same = by.find((b) => b.lines.join() === lines.join());
@@ -566,12 +582,13 @@ function renderRunes() {
     }
     return `<li class="rw"><div class="rw-head"><b>${esc(r.n)}</b><em>${r.s} sockets · lvl ${r.l}</em></div>` +
       `<div class="rw-runes">${r.r.map(([n, a]) => `<span>${artIcon(a, 'ic rune-ic')}${esc(n)}</span>`).join('')}</div>` +
-      `<p class="rw-meta">${esc([r.t.join(', ') + (r.x.length ? ` (not ${r.x.join(', ')})` : ''), r.p, r.lad].filter(Boolean).join(' · '))}</p>` +
+      weaponStrip(r) +
+      `<p class="rw-meta">${esc([baseNames(r).join(', ') + (r.x.length ? ` (not ${r.x.join(', ')})` : ''), r.p, r.lad].filter(Boolean).join(' · '))}</p>` +
       r.ln.map((l) => `<div class="v">${esc(l)}</div>`).join('') +
       by.map((b) => `<p class="rw-by">Runes in ${esc(b.where.join(' or '))}</p>` +
         b.lines.map((l) => `<div class="v dim">${esc(l)}</div>`).join('')).join('') + '</li>';
   });
-  document.getElementById('results').innerHTML = rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="hint">No matches.</p>';
+  document.getElementById('results').innerHTML = bar + (rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="hint">No matches.</p>');
 }
 
 // Search and Runewords share the search panel; each keeps its own query.
@@ -603,6 +620,10 @@ document.addEventListener('click', (e) => {
     if (sel === t.dataset.skill && reqMet(sel)) setPts(sel, ptsOf(sel) + 1);
     sel = t.dataset.skill;
   } else if (t.dataset.add) setPts(sel, ptsOf(sel) + Number(t.dataset.add));
+  else if (t.dataset.rwsort) {
+    const k = t.dataset.rwsort, cur = state.rwSort || { k: 'l', d: 1 };
+    state.rwSort = { k, d: cur.k === k ? -cur.d : 1 };
+  }
   else if ('reset' in t.dataset) { for (const [k] of classSkills(cls)) delete pts()[k]; }
   else if (t.dataset.jump) {
     const s = D.skills[t.dataset.jump];

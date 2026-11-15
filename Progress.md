@@ -24,6 +24,11 @@ that boosts it (other skills, items, anything else).
   body armor, shield); one search box filters on any of it. Shares the search panel (one query per panel).
   Fix: skill and item names no longer come from the Chinese-region overlay strings (Critical Strike showed as
   "Dangerous Strike").
+- 2026-11-15: Runewords: sort buttons Level / Sockets (tap again to flip, ties by level then name; kept in saved
+  state). Weapon runewords show a fixed strip of the 15 socketable weapon classes (sword ... orb), lit where a base of
+  that class takes the runeword at its socket count (weapons.txt gemsockets; e.g. 5-socket Call to Arms skips claw,
+  dagger, wand, club, orb); the base text names those classes. Data: extract `build_runewords.py` (`weapons`, `other`,
+  `weapon_classes.json`).
 
 ## Open
 - [ ] Runeword codex: base-item filter (e.g. only 4-socket armor) and per-base totals (runeword + runes summed)
