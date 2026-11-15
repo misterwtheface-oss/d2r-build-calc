@@ -19,8 +19,15 @@ that boosts it (other skills, items, anything else).
   skills that boost it, and items (with the game's inventory art) that raise, pierce, grant or proc it. Tree detail
   panel now shows Synergies only (other sections hidden by `FEATURES.detailEffects`); item filter chips removed.
   Item art: `assets/items.webp` sheet built from `data/hd/global/ui/items` (provenance in the extract's skills.json).
+- 2026-11-14 (2): Runewords codex (tab after Search): all 99 enabled runewords, rune icons in order, bases, sockets,
+  level, patch / ladder window, the runeword's lines in game wording and what its runes add per base (weapon, helm /
+  body armor, shield); one search box filters on any of it. Shares the search panel (one query per panel).
+  Fix: skill and item names no longer come from the Chinese-region overlay strings (Critical Strike showed as
+  "Dangerous Strike").
 
 ## Open
+- [ ] Runeword codex: base-item filter (e.g. only 4-socket armor) and per-base totals (runeword + runes summed)
+  if wanted.
 - [ ] Level 3: how the engine applies masteries / pierce / -resistance (stacking, caps); D2MOO as reference.
 - [ ] In-game tooltips (skilldesc lines, game text) render ~90% of lines. Still dropped: line codes 13 / 31 / 34 / 41 /
   78 / 79 (summon life and damage, curse divisor, undocumented), mastery tokens madm / math / macr / mael,

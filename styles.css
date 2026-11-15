@@ -90,6 +90,18 @@ body.searching .layout, body.searching .summary { display: none; }
 .search h3 i { font-style: normal; color: var(--dim); font-size: 11px; margin-left: 4px; }
 .row .item-ic { background-repeat: no-repeat; border-radius: 0; }
 
+.rw { padding: 10px 2px; border-bottom: 1px solid #221d18; font-size: 13px; }
+.rw-head { display: flex; align-items: baseline; gap: 8px; }
+.rw-head b { font: 15px Exocet, serif; letter-spacing: .03em; color: var(--rune); }
+.rw-head em { margin-left: auto; font-style: normal; color: var(--dim); font-size: 11px; }
+.rw-runes { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0 2px; }
+.rw-runes span { display: flex; align-items: center; gap: 4px; font-family: Exocet, serif; font-size: 12px; color: #ffa800; }
+.rune-ic { width: 26px; height: 26px; flex: 0 0 26px; }
+.rw-meta { margin: 2px 0 4px; color: var(--dim); font-size: 11px; }
+.rw .v { color: #9db4ff; }
+.rw .v.dim { color: #7f8fbf; }
+.rw-by { margin: 6px 0 1px; color: var(--dim); font-size: 11px; }
+
 .tip { margin: 0 0 8px; padding: 10px; background: #000c; border: 1px solid var(--line); border-radius: 3px;
   text-align: center; font-size: 13px; line-height: 1.45; }
 .tip .desc { margin: 0 0 6px; color: var(--text); }

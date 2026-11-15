@@ -22,6 +22,7 @@ const SKILL_EFFECT = { mastery: 'raises damage', pierce: 'lowers enemy resistanc
 
 const state = load();
 delete state.hideKinds;  // item filter chips were removed
+if ('q' in state) { state.qs = { search: state.q }; delete state.q; }  // one query per panel
 let cls = state.cls || 'sor';
 let page = state.page?.[cls] || 3;
 let sel = state.sel?.[cls] || null;
@@ -348,9 +349,10 @@ function levelBlock(k) {
 
 // ---------- render: classes, tabs, tree ----------
 function renderClasses() {
-  const search = state.view === 'search';
-  document.getElementById('classes').innerHTML = `<button class="cls${search ? ' on' : ''}" data-view="search">Search</button>` +
-    D.classes.map((c) => `<button class="cls${c.code === cls && !search ? ' on' : ''}" data-cls="${c.code}">${esc(c.name)}</button>`).join('');
+  const panel = PANELS[state.view];
+  document.getElementById('classes').innerHTML = Object.entries(PANELS).map(([v, p]) =>
+    `<button class="cls${state.view === v ? ' on' : ''}" data-view="${v}">${p.title}</button>`).join('') +
+    D.classes.map((c) => `<button class="cls${c.code === cls && !panel ? ' on' : ''}" data-cls="${c.code}">${esc(c.name)}</button>`).join('');
 }
 function renderSummary() {
   const n = totalPoints();
@@ -491,18 +493,22 @@ function buildSearch() {
   const items = rows.filter((r) => r.item != null).sort((a, b) => kindIx(a) - kindIx(b) || a.name.localeCompare(b.name));
   return { skills, synergy: rows.filter((r) => r.sec === 'synergy'), skill: rows.filter((r) => r.sec === 'skill'), items };
 }
-function itemIcon(i) {
-  const a = D.items[i][4], S = D.itemSheet;
+// Cell a of the item art sheet (items and runes).
+function artIcon(a, cls = 'ic sm item-ic') {
+  const S = D.itemSheet;
   if (a == null || a < 0) return '';
   const x = S.cols > 1 ? (a % S.cols) / (S.cols - 1) * 100 : 0, y = S.rows > 1 ? Math.floor(a / S.cols) / (S.rows - 1) * 100 : 0;
-  return `<span class="ic sm item-ic" style="background-image:url(${D.itemSheet.url});background-size:${S.cols * 100}% ${S.rows * 100}%;` +
+  return `<span class="${cls}" style="background-image:url(${D.itemSheet.url});background-size:${S.cols * 100}% ${S.rows * 100}%;` +
     `background-position:${x}% ${y}%"></span>`;
 }
+const itemIcon = (i) => artIcon(D.items[i][4]);
+// Query words, all of which must appear (shared by Search and Runewords).
+const queryWords = (q) => (q || '').toLowerCase().split(/\s+/).filter(Boolean);
+const hitAll = (words) => (t) => words.every((w) => t.includes(w));
 // Words must all appear in one place: the source's name, a line's text, or the name of a skill the line reaches.
 // A source matched by its own name shows all its lines; otherwise only the lines that match.
 function searchResults(q) {
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const hit = (t) => words.every((w) => t.includes(w));
+  const hit = hitAll(queryWords(q));
   searchIndex ||= buildSearch();
   const pick = (list) => list.map((r) => {
     const all = hit(r.name);
@@ -520,10 +526,10 @@ function reach(l, all, words) {
   return list.map(skillName).join(', ');
 }
 function renderSearch() {
-  const q = (state.q || '').trim();
+  const q = (state.qs?.search || '').trim();
   const out = document.getElementById('results');
   if (q.length < 2) { out.innerHTML = ''; return; }
-  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = queryWords(q);
   const res = searchResults(q);
   const sec = (title, list, body) => (list.length ? `<h3>${title} <i>${list.length}</i></h3><ul>${list.map(body).join('')}</ul>` : '');
   const skillRow = (k, sub) => `<li class="row" data-jump="${esc(k)}"><span class="ic sm" style="${iconStyle(D.skills[k])}"></span>` +
@@ -543,11 +549,46 @@ function renderSearch() {
   out.innerHTML = html || '<p class="hint">No matches.</p>';
 }
 
+// ---------- runewords view ----------
+// Codex of every enabled runeword: runes in order, bases, level, the runeword's own lines and what its runes add in
+// each kind of base (lines that are the same for two bases, helm and body armor, are listed once).
+const RUNES_IN = { weapon: 'a weapon', helm: 'a helm', armor: 'body armor', shield: 'a shield' };
+let runeIndex = null;
+function renderRunes() {
+  runeIndex ||= D.runewords.map((r) => ({ r, hay: [r.n, ...r.r.map((x) => x[0]), ...r.t, r.lad, r.p, ...r.ln,
+    ...Object.values(r.by).flat()].join(' ').toLowerCase() }));
+  const hit = hitAll(queryWords(state.qs?.runes));
+  const rows = runeIndex.filter((x) => hit(x.hay)).map(({ r }) => {
+    const by = [];
+    for (const [g, lines] of Object.entries(r.by)) {
+      const same = by.find((b) => b.lines.join() === lines.join());
+      if (same) same.where.push(RUNES_IN[g]); else if (lines.length) by.push({ where: [RUNES_IN[g]], lines });
+    }
+    return `<li class="rw"><div class="rw-head"><b>${esc(r.n)}</b><em>${r.s} sockets · lvl ${r.l}</em></div>` +
+      `<div class="rw-runes">${r.r.map(([n, a]) => `<span>${artIcon(a, 'ic rune-ic')}${esc(n)}</span>`).join('')}</div>` +
+      `<p class="rw-meta">${esc([r.t.join(', ') + (r.x.length ? ` (not ${r.x.join(', ')})` : ''), r.p, r.lad].filter(Boolean).join(' · '))}</p>` +
+      r.ln.map((l) => `<div class="v">${esc(l)}</div>`).join('') +
+      by.map((b) => `<p class="rw-by">Runes in ${esc(b.where.join(' or '))}</p>` +
+        b.lines.map((l) => `<div class="v dim">${esc(l)}</div>`).join('')).join('') + '</li>';
+  });
+  document.getElementById('results').innerHTML = rows.length ? `<ul>${rows.join('')}</ul>` : '<p class="hint">No matches.</p>';
+}
+
+// Search and Runewords share the search panel; each keeps its own query.
+const PANELS = { search: { title: 'Search', hint: 'Skill, item or effect', render: renderSearch },
+  runes: { title: 'Runewords', hint: 'Runeword, rune, base or stat', render: renderRunes } };
 function render() {
-  const search = state.view === 'search';
-  document.body.classList.toggle('searching', search);
+  const panel = PANELS[state.view];
+  document.body.classList.toggle('searching', !!panel);
   renderClasses(); renderSummary();
-  if (search) { renderSearch(); return; }
+  if (panel) {
+    const q = document.getElementById('q');
+    if (q.dataset.view !== state.view) {
+      q.dataset.view = state.view; q.placeholder = panel.hint; q.value = state.qs?.[state.view] || '';
+    }
+    panel.render();
+    return;
+  }
   renderTabs(); renderTree(); renderDetail();
 }
 
@@ -577,7 +618,7 @@ document.addEventListener('contextmenu', (e) => {
   sel = t.dataset.skill; setPts(sel, ptsOf(sel) - 1); save(); render();
 });
 document.getElementById('q').addEventListener('input', (e) => {
-  state.q = e.target.value; save(); renderSearch();
+  state.qs = { ...(state.qs || {}), [state.view]: e.target.value }; save(); PANELS[state.view]?.render();
 });
 document.addEventListener('change', (e) => {
   if (!e.target.matches('[data-bonus]')) return;
@@ -589,5 +630,4 @@ document.addEventListener('toggle', (e) => {
   if (d.dataset?.sec) { state.open = { ...(state.open || {}), [d.dataset.sec]: d.open }; save(); }
 }, true);
 
-document.getElementById('q').value = state.q || '';
 render();

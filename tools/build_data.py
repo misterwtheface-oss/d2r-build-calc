@@ -3,6 +3,7 @@
   python tools/build_data.py [--strict]
 
 Inputs : ../_d2r_extract/data/derived/skills.json   (tools/build_boosts.py in the extract)
+         ../_d2r_extract/data/derived/runewords.json (tools/build_runewords.py in the extract)
          ../_d2r_extract/assets/png/...             (tools/sprite2png.py in the extract)
          ../_d2r_extract/data/casc/data/hd/ui/fonts (game fonts)
 Outputs: data.js, assets/icons/<cls>.webp (icon sheet), assets/trees/<cls>_<page>.webp, assets/fonts/*
@@ -53,6 +54,25 @@ def ver(path):
 
 def rel(path):
     return os.path.relpath(path, APP).replace("\\", "/") + "?v=" + ver(path)
+
+
+def runeword_codex(art_ix):
+    """Runewords view rows from the extract's runewords.json; rune art joins the item sheet (cell = art index).
+    Row: n name, r runes [[name, art, lvl]], t base types, x excluded types, s sockets, l level, lad ladder window,
+    p patch, ln runeword lines, by {weapon|helm|armor|shield: rune socket lines}."""
+    src = os.path.join(EXT, "data", "derived", "runewords.json")
+    if not need(src, "runewords (tools/build_runewords.py)"):
+        return []
+    out = []
+    for r in json.load(open(src, encoding="utf-8")):
+        runes = []
+        for x in r["runes"]:
+            if not x["art"]:
+                missing.append(f"rune art: {x['code']}")
+            runes.append([x["name"].removesuffix(" Rune"), art_ix.setdefault(x["art"], len(art_ix)) if x["art"] else -1, x["lvl"]])
+        out.append({"n": r["name"], "r": runes, "t": r["types"], "x": r["exclude"], "s": r["sockets"], "l": r["lvl"],
+                    "lad": r["ladder"], "p": r["patch"], "ln": r["lines"], "by": r["runes_by"]})
+    return sorted(out, key=lambda r: (r["l"], r["n"]))
 
 
 def item_atlas(art_ix):
@@ -179,6 +199,7 @@ def main():
     for it in items:
         if it[4] < 0:
             missing.append(f"item art: {it[0]} {it[1]}")
+    runewords = runeword_codex(art_ix)
     item_sheet = item_atlas(art_ix)
 
     fonts = {}
@@ -189,7 +210,7 @@ def main():
             shutil.copyfile(p, dst)
             fonts[fn.split("-")[0].split(".")[0]] = rel(dst)
 
-    data = {"classes": classes, "skills": out_skills, "items": items, "itemSheet": item_sheet, "fonts": fonts,
+    data = {"classes": classes, "skills": out_skills, "items": items, "itemSheet": item_sheet, "runewords": runewords, "fonts": fonts,
             "groups": {k: g["rows"] for k, g in groups.items()},
             "ui": json.load(open(os.path.join(EXT, "data", "derived", "ui.json"), encoding="utf-8")),
             "missiles": json.load(open(os.path.join(EXT, "data", "derived", "missiles.json"), encoding="utf-8")),
