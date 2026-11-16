@@ -116,6 +116,15 @@ body.searching .layout, body.searching .summary { display: none; }
   letter-spacing: .03em; color: var(--dim); }
 .rw-sort button.on { color: var(--gold); border-color: var(--gold); }
 .rw-sort .clear { margin-left: auto; }
+.rw-av { padding: 0 5px; border: 1px solid; border-radius: 2px; font: 10px Exocet, serif; font-style: normal;
+  letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+.rw.ladder { box-shadow: inset 3px 0 #e0a33c; padding-left: 10px; }
+.rw.ladder .rw-av { color: #e0a33c; border-color: #e0a33c; background: #2a1d0a; }
+.rw.nonladder .rw-av { color: var(--dim); border-color: var(--line); }
+.rw.off { opacity: .45; }
+.rw.off .rw-head b { text-decoration: line-through; color: var(--dim); }
+.rw.off .rw-av { color: #d04a3a; border-color: #d04a3a; }
+.rw.off .ic, .rw.off .base-ic { filter: grayscale(1); }
 .rw-meta { margin: 2px 0 4px; color: var(--dim); font-size: 11px; }
 .rw .v { color: #9db4ff; }
 .rw .v.dim { color: #7f8fbf; }

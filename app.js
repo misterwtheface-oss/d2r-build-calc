@@ -552,6 +552,8 @@ function renderSearch() {
 // Codex of every enabled runeword: runes in order, bases, level, the runeword's own lines and what its runes add in
 // each kind of base (lines that are the same for two bases, helm and body armor, are listed once).
 // Each runeword shows every socketable class of its slot group (weapons, armor), lit where a base of that class takes it.
+// Availability this season (extract avail): badge text; the card takes the key as a class.
+const RW_AVAIL = { ladder: 'Ladder only', nonladder: 'Non-ladder only', off: 'Unavailable' };
 const RUNES_IN = { weapon: 'a weapon', helm: 'a helm', armor: 'body armor', shield: 'a shield' };
 // Sort by level or sockets, the other key breaking ties (then name); tapping the active key flips the direction.
 // Default: highest level first, then most sockets.
@@ -571,7 +573,7 @@ function classStrips(r) {
 // Bases in words: each class that takes the runeword (socket count included), then any type no class covers.
 const baseNames = (r) => [...D.baseClasses.filter(([k]) => r.b.includes(k)).map((c) => c[2]), ...r.o];
 function renderRunes() {
-  runeIndex ||= D.runewords.map((r) => ({ r, hay: [r.n, ...r.r.map((x) => x[0]), ...r.t, r.lad, r.p, ...r.ln,
+  runeIndex ||= D.runewords.map((r) => ({ r, hay: [r.n, ...r.r.map((x) => x[0]), ...r.t, r.lad, RW_AVAIL[r.av], r.p, ...r.ln,
     ...Object.values(r.by).flat()].join(' ').toLowerCase() }));
   const hit = hitAll(queryWords(state.qs?.runes));
   const sort = RW_SORT[state.rwSort?.k] ? state.rwSort : RW_SORT_DEFAULT;
@@ -590,7 +592,8 @@ function renderRunes() {
       const same = by.find((b) => b.lines.join() === lines.join());
       if (same) same.where.push(RUNES_IN[g]); else if (lines.length) by.push({ where: [RUNES_IN[g]], lines });
     }
-    return `<li class="rw"><div class="rw-head"><b>${esc(r.n)}</b><em>${r.s} sockets · lvl ${r.l}</em></div>` +
+    return `<li class="rw ${r.av}"><div class="rw-head"><b>${esc(r.n)}</b>` +
+      `${r.av ? `<i class="rw-av">${RW_AVAIL[r.av]}</i>` : ''}<em>${r.s} sockets · lvl ${r.l}</em></div>` +
       `<div class="rw-runes">${r.r.map(([n, a]) => `<span>${artIcon(a, 'ic rune-ic')}${esc(n)}</span>`).join('')}</div>` +
       classStrips(r) +
       `<p class="rw-meta">${esc([baseNames(r).join(', ') + (r.x.length ? ` (not ${r.x.join(', ')})` : ''), r.p, r.lad].filter(Boolean).join(' · '))}</p>` +

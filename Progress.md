@@ -34,6 +34,11 @@ that boosts it (other skills, items, anything else).
 - 2026-11-15 (2): Runewords base filter: bar of all 24 class tiles under the sort buttons (12 per row on phones, one
   row wide); tap to toggle, several = runewords that fit any of them; Clear appears while one is on. Saved in state
   (`rwBase`). Same tile code as the card strips (`baseTile`).
+- 2026-11-16: Ladder season 16 started 2026-11-13 (game build unchanged since the extract, nothing to refresh).
+  Runeword availability this season (extract `avail`, row `av`): Ladder only = gold edge + tag (Eternity),
+  Non-ladder only = grey tag (Mosaic: crafting disallowed in ladder), Unavailable = faded, struck-through, red tag
+  (none this season; checked with `build_runewords.py --season 10`). **New season: bump `LADDER_SEASON` in
+  `_d2r_extract/tools/build_runewords.py`** (not in game data; blz-log.txt shows the number), then rebuild.
 
 ## Open
 - [ ] Runeword codex: per-base totals (runeword + runes summed) if wanted (base filter done 2026-11-15).

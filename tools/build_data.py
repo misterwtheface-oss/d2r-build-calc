@@ -60,7 +60,7 @@ def rel(path):
 def runeword_codex(art_ix):
     """Runewords view rows from the extract's runewords.json; rune art joins the item sheet (cell = art index).
     Row: n name, r runes [[name, art, lvl]], t base types, x excluded types, s sockets, l level, lad ladder window,
-    p patch, ln runeword lines, by {weapon|helm|armor|shield: rune socket lines}, b base class keys, o base types no
+    av availability this season ('' everywhere, ladder, nonladder, off), p patch, ln runeword lines, by {weapon|helm|armor|shield: rune socket lines}, b base class keys, o base types no
     class covers. Also returns the base classes [[key, group, name, cell]] (base_classes.json, same build) and their
     art index (own sheet) for the class strips."""
     src = os.path.join(EXT, "data", "derived", "runewords.json")
@@ -80,7 +80,7 @@ def runeword_codex(art_ix):
                 missing.append(f"rune art: {x['code']}")
             runes.append([x["name"].removesuffix(" Rune"), art_ix.setdefault(x["art"], len(art_ix)) if x["art"] else -1, x["lvl"]])
         out.append({"n": r["name"], "r": runes, "t": r["types"], "x": r["exclude"], "s": r["sockets"], "l": r["lvl"],
-                    "lad": r["ladder"], "p": r["patch"], "ln": r["lines"], "by": r["runes_by"], "b": r["bases"],
+                    "lad": r["ladder"], "av": r["avail"], "p": r["patch"], "ln": r["lines"], "by": r["runes_by"], "b": r["bases"],
                     "o": r["other"]})
     return sorted(out, key=lambda r: (r["l"], r["n"])), classes, class_ix
 
